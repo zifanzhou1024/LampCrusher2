@@ -7,7 +7,7 @@ This project is a three.js application that loads a lamp model along with severa
 ## Project Structure
 
 ```
-your-project/
+LampCrusher2/
 ├── assets/
 │   ├── lamp.obj
 │   ├── lamp.mtl
