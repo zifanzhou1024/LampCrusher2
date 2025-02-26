@@ -63,6 +63,8 @@ window.addEventListener('mousemove', (event) => {
         const sensitivity = 0.002;
         cameraRotationX += event.movementY * sensitivity;
         cameraRotationY -= event.movementX * sensitivity;
+
+        // Constrain X rotation so we don't flip over top/bottom
         cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
     }
 });
@@ -348,6 +350,7 @@ window.startGame = startGame;
 function animate() {
     const dt = clock.getDelta();
 
+    // ----- Game logic: health, spawning letters, etc. -----
     if (gameStarted && !gameOver) {
         let elapsedTime = (performance.now() - startTime) / 1000;
         let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
@@ -365,6 +368,7 @@ function animate() {
         }
         updateUI(health, score, elapsedTime);
         ambientLight.intensity = (health / 100) * 0.5;
+
         letterSpawnTimer += dt;
         if (letterSpawnTimer >= currentSpawnInterval) {
             spawnFallingLetter();
@@ -373,29 +377,42 @@ function animate() {
         }
     }
 
+    // ----- Lamp movement, jumping, rotation -----
     if (lamp) {
-        // --- Horizontal Movement (x,z) ---
+        // --- Horizontal Movement (x,z), third-person style based on camera direction ---
         if (gameStarted) {
             const speed = 0.15;
+
+            // 1) Get camera's forward and right vectors (flattened to Y=0)
             const forward = new THREE.Vector3();
             camera.getWorldDirection(forward);
             forward.y = 0;
             forward.normalize();
+
             const right = new THREE.Vector3();
-            right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
-            right.normalize();
-            let move = new THREE.Vector3();
+            right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+            // 2) Build a move vector from WASD
+            let move = new THREE.Vector3(0, 0, 0);
             if (keyStates['w']) move.add(forward);
             if (keyStates['s']) move.sub(forward);
             if (keyStates['a']) move.sub(right);
             if (keyStates['d']) move.add(right);
-            if (move.length() > 0) {
+
+            // 3) If there's movement, rotate the lamp to face that direction and move
+            if (move.lengthSq() > 0) {
                 move.normalize();
-                // Update only horizontal components.
-                lamp.position.x += move.x * speed;
-                lamp.position.z += move.z * speed;
+
+                // OLD:  const angle = -Math.atan2(move.x, move.z);
+                // FIX:  Swap the order, remove minus => correct orientation:
+                const angle = Math.atan2(move.x, -move.z);
+                lamp.rotation.y = angle;
+
+                // Move the lamp
+                lamp.position.addScaledVector(move, speed);
             }
-            // Trigger jump on input while moving.
+
+            // Trigger jump on input while moving
             if (keyStates[' '] && !lampIsJumping) {
                 lampIsJumping = true;
                 lampInitialY = lamp.position.y;
@@ -404,7 +421,7 @@ function animate() {
             }
         }
 
-        // --- Auto-Jump on Start Screen ---
+        // --- Auto-Jump on Start Screen (for idle bopping) ---
         if (!gameStarted && !lampIsJumping) {
             lampIsJumping = true;
             lampInitialY = lamp.position.y;
@@ -422,12 +439,9 @@ function animate() {
             }
         }
 
-        // --- Update Lamp Rotation Based on Mouse Movement ---
-        // Offset by Math.PI to make the lamp face forward.
-        lamp.rotation.y = cameraRotationY + Math.PI;
-
-        // --- Camera Setup ---
+        // ----- Camera Setup -----
         if (firstPersonView) {
+            // If in first-person, stick camera to the lamp's head
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
             const lookDirection = new THREE.Vector3(
@@ -437,6 +451,7 @@ function animate() {
             );
             camera.lookAt(lamp.position.clone().add(lookDirection));
         } else {
+            // Otherwise, third-person: revolve around the lamp based on cameraRotationX/Y
             const offset = new THREE.Vector3(
                 cameraDistance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
                 cameraDistance * Math.sin(cameraRotationX) + 5,
@@ -453,6 +468,7 @@ function animate() {
             const letter = allLetters[i];
             const letterOBB = getOBB(letter, letterCollisionScale);
             if (obbIntersect(lampOBB, letterOBB)) {
+                // If lamp is above letter, “squish” the letter
                 if (lamp.position.y > letter.position.y + 0.5) {
                     if (!letter.userData.squishing) {
                         letter.userData.squishing = true;
@@ -463,10 +479,16 @@ function animate() {
                         health = Math.min(100, health + 10);
                     }
                 } else {
-                    let diff = new THREE.Vector3(lamp.position.x - letter.position.x, 0, lamp.position.z - letter.position.z);
+                    // Otherwise, separate them horizontally
+                    let diff = new THREE.Vector3(
+                        lamp.position.x - letter.position.x,
+                        0,
+                        lamp.position.z - letter.position.z
+                    );
                     if (diff.length() > 0.001) {
                         diff.normalize();
                         let attempts = 0;
+                        // Move lamp out of collision
                         while (obbIntersect(getOBB(lamp, lampCollisionScale), letterOBB) && attempts < 10) {
                             lamp.position.x += diff.x * 0.05;
                             lamp.position.z += diff.z * 0.05;
@@ -510,5 +532,6 @@ function animate() {
     processSquish(staticLetters);
     processSquish(fallingLetters);
 
+    // Render the scene
     renderer.render(scene, camera);
 }
