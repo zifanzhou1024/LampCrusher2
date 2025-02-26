@@ -111,6 +111,9 @@ const fallingLetters = [];
 let cameraRotationX = 0;
 let cameraRotationY = 0;
 
+// Global camera distance for third-person view.
+let cameraDistance = 15;
+
 window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase();
     keyStates[key] = true;
@@ -136,6 +139,15 @@ window.addEventListener('mousemove', (event) => {
         cameraRotationY -= event.movementX * sensitivity;
         cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
     }
+});
+
+// Scroll wheel to control camera distance (third-person view)
+window.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    // Adjust camera distance based on scroll direction; the factor can be tuned as needed.
+    cameraDistance += event.deltaY * 0.01;
+    // Clamp the distance to reasonable limits.
+    cameraDistance = Math.max(5, Math.min(50, cameraDistance));
 });
 
 // Variables for jump physics.
@@ -245,7 +257,8 @@ function spawnFallingLetter() {
 setInterval(spawnFallingLetter, 2000);
 
 // ----- Collision & Squish Animation Parameters -----
-const squishDuration = 1;
+// Squish duration is now 0.5x the original time.
+const squishDuration = 0.5;
 
 // Tuning factors: adjust these to make the collision volumes tighter or looser.
 const lampCollisionScale = 0.8;
@@ -256,8 +269,9 @@ function animate() {
     const dt = clock.getDelta();
 
     if (lamp) {
-        const speed = 0.1;
         // --- Lamp Movement ---
+        // Increased speed: 1.5x quicker than before.
+        const speed = 0.15;
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0;
@@ -302,11 +316,10 @@ function animate() {
             );
             camera.lookAt(lamp.position.clone().add(lookDirection));
         } else {
-            const distance = 15;
             const offset = new THREE.Vector3(
-                distance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
-                distance * Math.sin(cameraRotationX) + 5,
-                distance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
+                cameraDistance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
+                cameraDistance * Math.sin(cameraRotationX) + 5,
+                cameraDistance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
             );
             camera.position.copy(lamp.position).add(offset);
             camera.lookAt(lamp.position);
