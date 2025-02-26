@@ -63,7 +63,6 @@ window.addEventListener('wheel', (event) => {
 });
 
 // Variables for jump physics.
-let lampJumpVelocity = 0;
 let lampIsJumping = false;
 const gravity = -9.8;
 const jumpStrength = 6;
@@ -158,6 +157,31 @@ function obbIntersect(obb1, obb2) {
     return true;
 }
 
+// ----- Verlet Integration Helper Functions -----
+// For falling letters (updates full position)
+function verletIntegration(object, acceleration, dt) {
+    if (!object.userData.previousPosition) {
+        object.userData.previousPosition = object.position.clone();
+    }
+    const currentPos = object.position.clone();
+    const newPos = currentPos.clone().multiplyScalar(2)
+        .sub(object.userData.previousPosition)
+        .add(acceleration.clone().multiplyScalar(dt * dt));
+    object.userData.previousPosition.copy(currentPos);
+    object.position.copy(newPos);
+}
+
+// For the lamp's vertical (y) motion only.
+function verletVerticalIntegration(object, acceleration, dt) {
+    if (object.userData.previousY === undefined) {
+        object.userData.previousY = object.position.y;
+    }
+    let currentY = object.position.y;
+    let newY = 2 * currentY - object.userData.previousY + acceleration * dt * dt;
+    object.userData.previousY = currentY;
+    object.position.y = newY;
+}
+
 // ----- Load the Lamp Model (OBJ + MTL) -----
 const mtlLoaderLamp = new MTLLoader();
 mtlLoaderLamp.setPath('assets/');
@@ -172,6 +196,8 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
             object.scale.set(3, 3, 3);
             scene.add(object);
             lamp = object;
+            // Initialize vertical integration state.
+            lamp.userData.previousY = lamp.position.y;
             lampLight.position.set(0, 0.65, 0);
             lamp.add(lampLight);
             lampLight.target.position.set(0, -1, 10);
@@ -199,6 +225,8 @@ function loadLetter(letter, posX, posY, posZ) {
             (object) => {
                 object.rotation.y = -Math.PI / 2;
                 object.position.set(posX, posY, posZ);
+                // Initialize previousPosition for Verlet integration.
+                object.userData.previousPosition = object.position.clone();
                 scene.add(object);
                 staticLetters.push(object);
             },
@@ -232,7 +260,8 @@ function loadFallingLetter(letter, posX, posY, posZ) {
             (object) => {
                 object.rotation.y = -Math.PI / 2;
                 object.position.set(posX, posY, posZ);
-                object.userData.velocityY = 0;
+                // Initialize previousPosition for Verlet integration.
+                object.userData.previousPosition = object.position.clone();
                 object.userData.squishing = false;
                 scene.add(object);
                 fallingLetters.push(object);
@@ -295,6 +324,7 @@ function resetGame() {
     fallingLetters.length = 0;
     if (lamp) {
         lamp.position.set(0, 0, -10);
+        lamp.userData.previousY = lamp.position.y;
     }
     if (startMenu) {
         startMenu.style.display = 'block';
@@ -327,13 +357,7 @@ function animate() {
     }
 
     if (lamp) {
-        // Auto jump when game not started.
-        if (!gameStarted && !lampIsJumping) {
-            lampJumpVelocity = jumpStrength;
-            lampIsJumping = true;
-            lampInitialY = lamp.position.y;
-        }
-
+        // --- Horizontal Movement (x,z) ---
         if (gameStarted) {
             const speed = 0.15;
             const forward = new THREE.Vector3();
@@ -350,26 +374,38 @@ function animate() {
             if (keyStates['d']) move.add(right);
             if (move.length() > 0) {
                 move.normalize();
-                lamp.position.add(move.multiplyScalar(speed));
-                lamp.rotation.y = Math.atan2(move.x, move.z);
+                // Update only horizontal components.
+                lamp.position.x += move.x * speed;
+                lamp.position.z += move.z * speed;
             }
+            // Trigger jump on input while moving.
             if (keyStates[' '] && !lampIsJumping) {
-                lampJumpVelocity = jumpStrength;
                 lampIsJumping = true;
                 lampInitialY = lamp.position.y;
+                const dtApprox = 0.016;
+                lamp.userData.previousY = lamp.position.y - jumpStrength * dtApprox;
             }
         }
 
+        // --- Auto-Jump on Start Screen ---
+        if (!gameStarted && !lampIsJumping) {
+            lampIsJumping = true;
+            lampInitialY = lamp.position.y;
+            const dtApprox = 0.016;
+            lamp.userData.previousY = lamp.position.y - jumpStrength * dtApprox;
+        }
+
+        // --- Vertical (Jump) Integration ---
         if (lampIsJumping) {
-            lampJumpVelocity += gravity * dt;
-            lamp.position.y += lampJumpVelocity * dt;
+            verletVerticalIntegration(lamp, gravity, dt);
             if (lamp.position.y < lampInitialY) {
                 lamp.position.y = lampInitialY;
                 lampIsJumping = false;
-                lampJumpVelocity = 0;
+                lamp.userData.previousY = lampInitialY;
             }
         }
 
+        // --- Camera Setup ---
         if (firstPersonView) {
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
@@ -388,16 +424,15 @@ function animate() {
             camera.position.copy(lamp.position).add(offset);
             camera.lookAt(lamp.position);
         }
-    }
 
-    if (lamp) {
+        // --- Lamp-Letter Collisions ---
         const lampOBB = getOBB(lamp, lampCollisionScale);
         const allLetters = staticLetters.concat(fallingLetters);
         for (let i = allLetters.length - 1; i >= 0; i--) {
             const letter = allLetters[i];
             const letterOBB = getOBB(letter, letterCollisionScale);
             if (obbIntersect(lampOBB, letterOBB)) {
-                if (lampJumpVelocity < 0 && lamp.position.y > letter.position.y + 0.5) {
+                if (lamp.position.y > letter.position.y + 0.5) {
                     if (!letter.userData.squishing) {
                         letter.userData.squishing = true;
                         letter.userData.squishElapsed = 0;
@@ -422,15 +457,20 @@ function animate() {
         }
     }
 
+    // ----- Update Falling Letters with Full Verlet Integration -----
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
-        letter.userData.velocityY += -4.9 * dt;
-        letter.position.y += letter.userData.velocityY * dt;
-        if (letter.position.y <= 0) {
+        const gravityAcc = new THREE.Vector3(0, -9.8, 0);
+        verletIntegration(letter, gravityAcc, dt);
+        if (letter.position.y < 0) {
             letter.position.y = 0;
+            if (letter.userData.previousPosition) {
+                letter.userData.previousPosition.y = 0;
+            }
         }
     }
 
+    // ----- Process Squishing Animations -----
     const processSquish = (letterArray) => {
         for (let i = letterArray.length - 1; i >= 0; i--) {
             const letter = letterArray[i];
