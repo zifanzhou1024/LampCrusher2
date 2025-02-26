@@ -2,9 +2,65 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
+// ---------- Game State & UI Variables --------------
+let gameStarted = false;
+let gameOver = false;
+let health = 100;
+let score = 0;
+let startTime = 0;
+let letterSpawnTimer = 0;          // accumulates time for spawning falling letters
+let currentSpawnInterval = 2;      // initial spawn interval (in seconds)
+
+// Create UI elements: Start Menu and Health/Score overlay.
+const startMenu = document.createElement('div');
+startMenu.id = 'startMenu';
+startMenu.style.position = 'absolute';
+startMenu.style.top = '50%';
+startMenu.style.left = '50%';
+startMenu.style.transform = 'translate(-50%, -50%)';
+startMenu.style.textAlign = 'center';
+startMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+startMenu.style.padding = '20px';
+startMenu.style.borderRadius = '10px';
+startMenu.style.zIndex = '9999';
+
+const titleElement = document.createElement('h1');
+titleElement.textContent = 'Lamp Crusher';
+titleElement.style.color = 'white';
+titleElement.style.marginBottom = '20px';
+
+const startButton = document.createElement('button');
+startButton.textContent = 'Start Game';
+startButton.style.padding = '10px 20px';
+startButton.style.fontSize = '18px';
+startButton.style.backgroundColor = '#4CAF50';
+startButton.style.color = 'white';
+startButton.style.border = 'none';
+startButton.style.borderRadius = '5px';
+startButton.style.cursor = 'pointer';
+startButton.addEventListener('click', startGame);
+
+startMenu.appendChild(titleElement);
+startMenu.appendChild(startButton);
+document.body.appendChild(startMenu);
+
+const healthAndScoreElement = document.createElement('div');
+healthAndScoreElement.id = 'healthAndScore';
+healthAndScoreElement.style.position = 'absolute';
+healthAndScoreElement.style.top = '10px';
+healthAndScoreElement.style.left = '50%';
+healthAndScoreElement.style.transform = 'translateX(-50%)';
+healthAndScoreElement.style.color = 'white';
+healthAndScoreElement.style.fontSize = '20px';
+healthAndScoreElement.style.fontFamily = 'Arial, sans-serif';
+healthAndScoreElement.style.zIndex = '9999';
+healthAndScoreElement.textContent = `Health: ${health} | Score: ${score}`;
+document.body.appendChild(healthAndScoreElement);
+
+// ---------- End of Game State & UI Variables --------------
+
+
 // ----- Custom OBB Functions with Collision Scale -----
-// Compute an OBB from an Object3D using its world-transformed bounding box,
-// then scale the halfSizes to get a tighter collision volume.
 function getOBB(object, collisionScale = 1) {
     object.updateWorldMatrix(true, false);
     let aabb = new THREE.Box3().setFromObject(object);
@@ -24,20 +80,16 @@ function getOBB(object, collisionScale = 1) {
     return { center, axes, halfSizes };
 }
 
-// For a given OBB, compute its projection radius on an axis.
 function halfProjection(obb, axis) {
     return obb.halfSizes.x * Math.abs(axis.dot(obb.axes[0])) +
         obb.halfSizes.y * Math.abs(axis.dot(obb.axes[1])) +
         obb.halfSizes.z * Math.abs(axis.dot(obb.axes[2]));
 }
 
-// Separating Axis Theorem test for two OBBs.
 function obbIntersect(obb1, obb2) {
     let axes = [];
-    // Add the three axes of each box.
     axes.push(obb1.axes[0], obb1.axes[1], obb1.axes[2],
         obb2.axes[0], obb2.axes[1], obb2.axes[2]);
-    // Add cross products of each pair (if nonzero).
     for (let i = 0; i < 3; i++) {
         for (let j = 0; j < 3; j++) {
             let axis = new THREE.Vector3().crossVectors(obb1.axes[i], obb2.axes[j]);
@@ -47,19 +99,17 @@ function obbIntersect(obb1, obb2) {
             }
         }
     }
-    // Compute the translation vector between the centers.
     let tVec = new THREE.Vector3().subVectors(obb2.center, obb1.center);
-    // Test for separation along each axis.
     for (let i = 0; i < axes.length; i++) {
         let axis = axes[i];
         let r1 = halfProjection(obb1, axis);
         let r2 = halfProjection(obb2, axis);
         let t = Math.abs(tVec.dot(axis));
         if (t > r1 + r2) {
-            return false; // Found a separating axis.
+            return false;
         }
     }
-    return true; // No separating axis found.
+    return true;
 }
 
 // ----- Scene, Camera, Renderer Setup -----
@@ -98,20 +148,16 @@ lampLight.position.set(0, 2, 0);
 scene.add(lampLight);
 
 // ----- Global Variables for Lamp Control -----
-let lamp = null; // Will store the lamp object once loaded.
+let lamp = null; // the lamp object once loaded.
 const keyStates = {};
 let firstPersonView = false;  // default to third-person view.
-let vKeyPressed = false;      // flag to prevent continuous toggling.
+let vKeyPressed = false;      // to prevent continuous toggling.
 
-// Arrays to keep track of letters for collision and squish animation.
 const staticLetters = [];
 const fallingLetters = [];
 
-// Mouse-controlled camera rotation angles (in radians).
 let cameraRotationX = 0;
 let cameraRotationY = 0;
-
-// Global camera distance for third-person view.
 let cameraDistance = 15;
 
 window.addEventListener('keydown', (event) => {
@@ -130,8 +176,6 @@ window.addEventListener('keyup', (event) => {
         vKeyPressed = false;
     }
 });
-
-// Mouse movement (when pointer is locked)
 window.addEventListener('mousemove', (event) => {
     if (document.pointerLockElement === renderer.domElement) {
         const sensitivity = 0.002;
@@ -140,13 +184,9 @@ window.addEventListener('mousemove', (event) => {
         cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
     }
 });
-
-// Scroll wheel to control camera distance (third-person view)
 window.addEventListener('wheel', (event) => {
     event.preventDefault();
-    // Adjust camera distance based on scroll direction; the factor can be tuned as needed.
     cameraDistance += event.deltaY * 0.01;
-    // Clamp the distance to reasonable limits.
     cameraDistance = Math.max(5, Math.min(50, cameraDistance));
 });
 
@@ -157,11 +197,9 @@ const gravity = -9.8;
 const jumpStrength = 5;
 let lampInitialY = 0;
 
-// THREE.Clock for delta time.
 const clock = new THREE.Clock();
 
 // ----- Load the Lamp Model (OBJ + MTL) -----
-// Lamp is scaled 3× and now starts at (0, 0, -10) to avoid immediate intersections.
 const mtlLoaderLamp = new MTLLoader();
 mtlLoaderLamp.setPath('assets/');
 mtlLoaderLamp.load('lamp.mtl', (materials) => {
@@ -219,7 +257,7 @@ loadLetter('a',  2, 0, 0);
 loadLetter('r',  4, 0, 0);
 
 // ----- Dynamic Spawning of Falling Letters -----
-const letterGravity = -4.9;
+// Modified so that letters spawn based on a timer in the animate loop.
 function loadFallingLetter(letter, posX, posY, posZ) {
     const mtlLoader = new MTLLoader();
     mtlLoader.setPath('assets/');
@@ -247,6 +285,7 @@ function loadFallingLetter(letter, posX, posY, posZ) {
     });
 }
 function spawnFallingLetter() {
+    if (!gameStarted || gameOver) return;
     const letters = ['p', 'i', 'x', 'a', 'r'];
     const randomLetter = letters[Math.floor(Math.random() * letters.length)];
     const posX = Math.random() * 20 - 10;
@@ -254,23 +293,115 @@ function spawnFallingLetter() {
     const posZ = Math.random() * 20 - 10;
     loadFallingLetter(randomLetter, posX, posY, posZ);
 }
-setInterval(spawnFallingLetter, 2000);
 
 // ----- Collision & Squish Animation Parameters -----
-// Squish duration is now 0.5x the original time.
 const squishDuration = 0.5;
-
-// Tuning factors: adjust these to make the collision volumes tighter or looser.
 const lampCollisionScale = 0.8;
 const letterCollisionScale = 0.9;
+
+// ---------- Game Over Screen --------------
+function displayGameOver() {
+    const gameOverDiv = document.createElement('div');
+    gameOverDiv.id = 'gameOver';
+    gameOverDiv.style.position = 'absolute';
+    gameOverDiv.style.top = '50%';
+    gameOverDiv.style.left = '50%';
+    gameOverDiv.style.transform = 'translate(-50%, -50%)';
+    gameOverDiv.style.textAlign = 'center';
+    gameOverDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    gameOverDiv.style.padding = '20px';
+    gameOverDiv.style.borderRadius = '10px';
+    gameOverDiv.style.zIndex = '9999';
+
+    const gameOverText = document.createElement('h1');
+    gameOverText.textContent = 'Game Over';
+    gameOverText.style.color = 'white';
+    gameOverText.style.marginBottom = '20px';
+
+    const playAgainButton = document.createElement('button');
+    playAgainButton.textContent = 'Play Again';
+    playAgainButton.style.padding = '10px 20px';
+    playAgainButton.style.fontSize = '18px';
+    playAgainButton.style.backgroundColor = '#4CAF50';
+    playAgainButton.style.color = 'white';
+    playAgainButton.style.border = 'none';
+    playAgainButton.style.borderRadius = '5px';
+    playAgainButton.style.cursor = 'pointer';
+    playAgainButton.addEventListener('click', resetGame);
+
+    gameOverDiv.appendChild(gameOverText);
+    gameOverDiv.appendChild(playAgainButton);
+    document.body.appendChild(gameOverDiv);
+}
+
+// ---------- Start and Reset Game Functions --------------
+function startGame() {
+    gameStarted = true;
+    gameOver = false;
+    health = 100;
+    score = 0;
+    startTime = performance.now();
+    letterSpawnTimer = 0;
+    currentSpawnInterval = 2;
+    // Hide start menu.
+    startMenu.style.display = 'none';
+}
+
+function resetGame() {
+    // Remove any game over overlay.
+    const gameOverDiv = document.getElementById('gameOver');
+    if (gameOverDiv) gameOverDiv.remove();
+
+    // Reset game state and remove falling letters.
+    gameStarted = false;
+    gameOver = false;
+    health = 100;
+    score = 0;
+    startTime = 0;
+    letterSpawnTimer = 0;
+    currentSpawnInterval = 2;
+    // Remove falling letters from scene.
+    fallingLetters.forEach(letter => scene.remove(letter));
+    fallingLetters.length = 0;
+    // Optionally, reset lamp position.
+    if (lamp) {
+        lamp.position.set(0, 0, -10);
+    }
+    // Show start menu again.
+    startMenu.style.display = 'block';
+}
 
 // ----- Animation Loop -----
 function animate() {
     const dt = clock.getDelta();
 
+    // Only update game logic if game has started.
+    if (gameStarted && !gameOver) {
+        // ---------- Health Decrease & Timer -----------
+        let elapsedTime = (performance.now() - startTime) / 1000; // seconds elapsed
+        // Decrease health over time; rate increases with time.
+        let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
+        health -= 10 * healthDecreaseRate * dt;
+        if (health <= 0) {
+            health = 0;
+            gameOver = true;
+            displayGameOver();
+        }
+        // Update UI.
+        healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score}`;
+
+        // ---------- Difficulty Scaling & Letter Spawning -----------
+        letterSpawnTimer += dt;
+        if (letterSpawnTimer >= currentSpawnInterval) {
+            spawnFallingLetter();
+            letterSpawnTimer = 0;
+            // Decrease spawn interval over time (min 0.5 seconds).
+            currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
+        }
+    }
+
+    // ---------- Lamp Movement ----------
     if (lamp) {
-        // --- Lamp Movement ---
-        // Increased speed: 1.5x quicker than before.
         const speed = 0.15;
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
@@ -289,7 +420,7 @@ function animate() {
             lamp.position.add(move.multiplyScalar(speed));
             lamp.rotation.y = Math.atan2(move.x, move.z);
         }
-        // --- Lamp Jump Movement ---
+        // ---------- Lamp Jump Movement ----------
         if (keyStates[' '] && !lampIsJumping) {
             lampJumpVelocity = jumpStrength;
             lampIsJumping = true;
@@ -305,7 +436,7 @@ function animate() {
             }
         }
         lampLight.position.set(lamp.position.x, lamp.position.y + 2, lamp.position.z);
-        // --- Camera Control ---
+        // ---------- Camera Control ----------
         if (firstPersonView) {
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
@@ -326,7 +457,7 @@ function animate() {
         }
     }
 
-    // --- Robust OBB Collision Detection & Response ---
+    // ---------- Collision Detection & Squish Animation ----------
     if (lamp) {
         const lampOBB = getOBB(lamp, lampCollisionScale);
         const allLetters = staticLetters.concat(fallingLetters);
@@ -341,6 +472,9 @@ function animate() {
                         letter.userData.squishElapsed = 0;
                         letter.userData.squishDuration = squishDuration;
                         letter.userData.originalScale = letter.scale.clone();
+                        // Increase score and restore some health upon a successful crush.
+                        score += 10;
+                        health = Math.min(100, health + 10);
                     }
                 } else {
                     // Otherwise, nudge the lamp horizontally (XZ) to resolve penetration.
@@ -359,17 +493,17 @@ function animate() {
         }
     }
 
-    // --- Update Falling Letters Movement ---
+    // ---------- Update Falling Letters Movement ----------
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
-        letter.userData.velocityY += letterGravity * dt;
+        letter.userData.velocityY += -4.9 * dt;
         letter.position.y += letter.userData.velocityY * dt;
         if (letter.position.y <= 0) {
             letter.position.y = 0;
         }
     }
 
-    // --- Update Squish Animation for All Letters ---
+    // ---------- Update Squish Animation for All Letters ----------
     const processSquish = (letterArray) => {
         for (let i = letterArray.length - 1; i >= 0; i--) {
             const letter = letterArray[i];
