@@ -2,19 +2,19 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
-// ----- Custom OBB Functions -----
-// Compute an OBB from an Object3D using its world-transformed bounding box.
-function getOBB(object) {
-    // Ensure world matrix is updated
+// ----- Custom OBB Functions with Collision Scale -----
+// Compute an OBB from an Object3D using its world-transformed bounding box,
+// then scale the halfSizes to get a tighter collision volume.
+function getOBB(object, collisionScale = 1) {
     object.updateWorldMatrix(true, false);
-    // Compute AABB in world space
     let aabb = new THREE.Box3().setFromObject(object);
     let center = new THREE.Vector3();
     aabb.getCenter(center);
     let size = new THREE.Vector3();
     aabb.getSize(size);
-    let halfSizes = size.multiplyScalar(0.5);
-    // Extract the local axes from the object's world matrix
+    // Scale down the halfSizes to tighten the collision volume.
+    let halfSizes = size.multiplyScalar(0.5).multiplyScalar(collisionScale);
+    // Extract the local axes from the object's world matrix.
     let m = object.matrixWorld;
     let axes = [
         new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
@@ -247,6 +247,10 @@ setInterval(spawnFallingLetter, 2000);
 // ----- Collision & Squish Animation Parameters -----
 const squishDuration = 1;
 
+// Tuning factors: adjust these to make the collision volumes tighter or looser.
+const lampCollisionScale = 0.8;
+const letterCollisionScale = 0.9;
+
 // ----- Animation Loop -----
 function animate() {
     const dt = clock.getDelta();
@@ -311,11 +315,11 @@ function animate() {
 
     // --- Robust OBB Collision Detection & Response ---
     if (lamp) {
-        const lampOBB = getOBB(lamp);
+        const lampOBB = getOBB(lamp, lampCollisionScale);
         const allLetters = staticLetters.concat(fallingLetters);
         for (let i = allLetters.length - 1; i >= 0; i--) {
             const letter = allLetters[i];
-            const letterOBB = getOBB(letter);
+            const letterOBB = getOBB(letter, letterCollisionScale);
             if (obbIntersect(lampOBB, letterOBB)) {
                 // If lamp is descending and coming from above the letter, trigger squish.
                 if (lampJumpVelocity < 0 && lamp.position.y > letter.position.y + 0.5) {
@@ -331,7 +335,7 @@ function animate() {
                     if (diff.length() > 0.001) {
                         diff.normalize();
                         let attempts = 0;
-                        while (obbIntersect(getOBB(lamp), letterOBB) && attempts < 10) {
+                        while (obbIntersect(getOBB(lamp, lampCollisionScale), letterOBB) && attempts < 10) {
                             lamp.position.x += diff.x * 0.05;
                             lamp.position.z += diff.z * 0.05;
                             attempts++;
