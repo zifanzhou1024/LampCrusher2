@@ -111,7 +111,7 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
     );
 });
 
-// ----- Helper Function to Load Letter Models -----
+// ----- Helper Function to Load Static Letters -----
 function loadLetter(letter, posX, posY, posZ) {
     const mtlLoader = new MTLLoader();
     mtlLoader.setPath('assets/');
@@ -129,7 +129,7 @@ function loadLetter(letter, posX, posY, posZ) {
                 scene.add(object);
             },
             (xhr) => {
-                console.log(`Letter ${letter}: ${(xhr.loaded / xhr.total * 100)}% loaded`);
+                console.log(`Letter ${letter}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
             },
             (error) => {
                 console.error(`An error occurred while loading letter ${letter}:`, error);
@@ -138,12 +138,58 @@ function loadLetter(letter, posX, posY, posZ) {
     });
 }
 
-// ----- Load Letters and Position Them (sitting on the ground) -----
+// ----- Load Static Letters (remain on the ground) -----
 loadLetter('p', -4, 0, 0);
 loadLetter('i', -2, 0, 0);
 loadLetter('x',  0, 0, 0);
 loadLetter('a',  2, 0, 0);
 loadLetter('r',  4, 0, 0);
+
+// ----- Dynamic Spawning of Falling Letters -----
+const fallingLetters = [];
+const letterGravity = -4.9; // gravity constant for falling letters
+
+function loadFallingLetter(letter, posX, posY, posZ) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.setPath('assets/');
+    mtlLoader.load(`pixar_${letter}.mtl`, (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.setPath('assets/');
+        objLoader.load(`pixar_${letter}.obj`,
+            (object) => {
+                // Rotate the letter 90° to the left so its front faces forward
+                object.rotation.y = -Math.PI / 2;
+                // Set the starting position for the falling letter
+                object.position.set(posX, posY, posZ);
+                // Initialize its downward velocity (stored in userData)
+                object.userData.velocityY = 0;
+                scene.add(object);
+                fallingLetters.push(object);
+            },
+            (xhr) => {
+                console.log(`Falling letter ${letter}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
+            },
+            (error) => {
+                console.error(`Error loading falling letter ${letter}:`, error);
+            }
+        );
+    });
+}
+
+function spawnFallingLetter() {
+    const letters = ['p', 'i', 'x', 'a', 'r'];
+    const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+    // Randomize x and z positions within a chosen range (e.g., [-10, 10])
+    const posX = Math.random() * 20 - 10;
+    const posY = 20; // Spawn high above the ground
+    const posZ = Math.random() * 20 - 10;
+    loadFallingLetter(randomLetter, posX, posY, posZ);
+}
+
+// Spawn a new falling letter every 2 seconds
+setInterval(spawnFallingLetter, 2000);
 
 // ----- Animation Loop -----
 function animate() {
@@ -218,6 +264,21 @@ function animate() {
             );
             camera.position.copy(lamp.position).add(offset);
             camera.lookAt(lamp.position);
+        }
+    }
+
+    // ----- Update Falling Letters -----
+    for (let i = fallingLetters.length - 1; i >= 0; i--) {
+        const letter = fallingLetters[i];
+        // Update its vertical velocity with gravity
+        letter.userData.velocityY += letterGravity * dt;
+        // Move the letter downwards based on its velocity
+        letter.position.y += letter.userData.velocityY * dt;
+        // If the letter reaches (or falls below) the ground level, remove it
+        if (letter.position.y <= 0) {
+            letter.position.y = 0
+            //scene.remove(letter);
+            //fallingLetters.splice(i, 1);
         }
     }
 
