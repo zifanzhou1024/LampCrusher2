@@ -5,7 +5,7 @@ export function initializeUI() {
     const startMenu = document.createElement('div');
     startMenu.id = 'startMenu';
     startMenu.style.position = 'absolute';
-    startMenu.style.top = '50%';
+    startMenu.style.top = '70%'; // Adjusted from 50% to 70%
     startMenu.style.left = '50%';
     startMenu.style.transform = 'translate(-50%, -50%)';
     startMenu.style.textAlign = 'center';
@@ -66,7 +66,7 @@ export function initializeUI() {
     healthAndScoreElement.style.fontSize = '20px';
     healthAndScoreElement.style.fontFamily = 'Arial, sans-serif';
     healthAndScoreElement.style.zIndex = '9999';
-    healthAndScoreElement.textContent = `Health: 100 | Score: 0 | Time: 0 s`;
+    healthAndScoreElement.textContent = 'Health: 100 | Score: 0 | Time: 0 s';
     document.body.appendChild(healthAndScoreElement);
 
     return { startMenu, healthAndScoreElement };
@@ -83,7 +83,7 @@ export function displayGameOverScreen(playAgainCallback) {
     const gameOverDiv = document.createElement('div');
     gameOverDiv.id = 'gameOver';
     gameOverDiv.style.position = 'absolute';
-    gameOverDiv.style.top = '50%';
+    gameOverDiv.style.top = '60%'; // Adjusted from 50% to 60%
     gameOverDiv.style.left = '50%';
     gameOverDiv.style.transform = 'translate(-50%, -50%)';
     gameOverDiv.style.textAlign = 'center';

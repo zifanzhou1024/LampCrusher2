@@ -11,25 +11,29 @@ let gameOver = false;
 let health = 100;
 let score = 0;
 let startTime = 0;
-let letterSpawnTimer = 0;          // accumulates time for spawning falling letters
-let currentSpawnInterval = 2;      // initial spawn interval (in seconds)
-let currentGameMode = 'normal';    // 'normal' or 'demo'
-let healthDecreasePaused = false;  // New variable to pause health decrease
+let letterSpawnTimer = 0;
+let currentSpawnInterval = 2;
+// Game mode is now one of 'intro', 'normal', or 'demo'
+let currentGameMode = 'intro';
+let healthDecreasePaused = false;  // Allows pausing health decrease
+
+// View toggle variables (only active in non-intro modes)
+let firstPersonView = false;  // defaults to third‑person view
+let vKeyPressed = false;
+let pKeyPressed = false;
 
 // Initialize UI elements.
 const { startMenu } = initializeUI();
 
-// ----- Global Variables for Lamp Control -----
-let lamp = null; // the lamp object once loaded.
+// ----- Global Variables for Lamp & Letters -----
+let lamp = null; // Will hold the loaded lamp model.
 const keyStates = {};
-let firstPersonView = false;  // default to third-person view.
-let vKeyPressed = false;      // prevent continuous toggling.
-let pKeyPressed = false;      // prevent continuous toggling for pause
 
 const staticLetters = [];
 const fallingLetters = [];
 
-let cameraRotationX = 0;
+// Camera control variables (for third‑person view)
+let cameraRotationX = currentGameMode === 'intro' ? 0 : -0.2;
 let cameraRotationY = 0;
 let cameraDistance = 15;
 
@@ -37,7 +41,8 @@ let cameraDistance = 15;
 window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase();
     keyStates[key] = true;
-    if (key === 'v' && !vKeyPressed) {
+    // Only allow toggling views outside the intro sequence.
+    if (key === 'v' && !vKeyPressed && currentGameMode !== 'intro') {
         firstPersonView = !firstPersonView;
         vKeyPressed = true;
         console.log("View mode toggled. First-person:", firstPersonView);
@@ -63,8 +68,7 @@ window.addEventListener('mousemove', (event) => {
         const sensitivity = 0.002;
         cameraRotationX += event.movementY * sensitivity;
         cameraRotationY -= event.movementX * sensitivity;
-
-        // Constrain X rotation so we don't flip over top/bottom
+        // Clamp vertical rotation so the camera never flips over.
         cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
     }
 });
@@ -84,7 +88,7 @@ const clock = new THREE.Clock();
 
 // ----- Three.js Scene Setup -----
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x6689FF);  // Blue background
+scene.background = new THREE.Color(0x6689FF);
 
 const camera = new THREE.PerspectiveCamera(
     75, window.innerWidth / window.innerHeight, 0.1, 1000
@@ -172,7 +176,6 @@ function obbIntersect(obb1, obb2) {
 }
 
 // ----- Verlet Integration Helper Functions -----
-// For falling letters (updates full position)
 function verletIntegration(object, acceleration, dt) {
     if (!object.userData.previousPosition) {
         object.userData.previousPosition = object.position.clone();
@@ -185,7 +188,6 @@ function verletIntegration(object, acceleration, dt) {
     object.position.copy(newPos);
 }
 
-// For the lamp's vertical (y) motion only.
 function verletVerticalIntegration(object, acceleration, dt) {
     if (object.userData.previousY === undefined) {
         object.userData.previousY = object.position.y;
@@ -206,9 +208,9 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
     objLoaderLamp.setPath('assets/');
     objLoaderLamp.load('lamp.obj',
         (object) => {
-            object.position.set(0, 0, -10);
+            object.position.set(-3, 0, 5);
             object.scale.set(3, 3, 3);
-            object.rotation.y = Math.PI;
+            object.rotation.y = - Math.PI / 2; // object.rotation.y = Math.PI;
             scene.add(object);
             lamp = object;
             // Initialize vertical integration state.
@@ -238,9 +240,8 @@ function loadLetter(letter, posX, posY, posZ) {
         objLoader.setPath('assets/');
         objLoader.load(`pixar_${letter}.obj`,
             (object) => {
-                object.rotation.y = -Math.PI / 2;
+                object.rotation.y = -Math.PI / 2; //object.rotation.y = -Math.PI / 2;
                 object.position.set(posX, posY, posZ);
-                // Initialize previousPosition for Verlet integration.
                 object.userData.previousPosition = object.position.clone();
                 scene.add(object);
                 staticLetters.push(object);
@@ -256,11 +257,11 @@ function loadLetter(letter, posX, posY, posZ) {
 }
 
 // Load Static Letters.
-loadLetter('p', -4, 0, 0);
-loadLetter('i', -2, 0, 0);
-loadLetter('x', 0, 0, 0);
-loadLetter('a', 2, 0, 0);
-loadLetter('r', 4, 0, 0);
+loadLetter('p', -8, 0, 0);
+loadLetter('i', -4, 0, 0);
+loadLetter('x',  0, 0, 0);
+loadLetter('a',  4, 0, 0);
+loadLetter('r',  8, 0, 0);
 
 // ----- Dynamic Spawning of Falling Letters -----
 function loadFallingLetter(letter, posX, posY, posZ) {
@@ -275,7 +276,6 @@ function loadFallingLetter(letter, posX, posY, posZ) {
             (object) => {
                 object.rotation.y = -Math.PI / 2;
                 object.position.set(posX, posY, posZ);
-                // Initialize previousPosition for Verlet integration.
                 object.userData.previousPosition = object.position.clone();
                 object.userData.squishing = false;
                 scene.add(object);
@@ -313,7 +313,8 @@ function displayGameOver() {
 }
 
 function startGame(mode = 'normal') {
-    currentGameMode = mode;
+    // When starting the game, switch from the intro state into either normal or demo mode.
+    currentGameMode = mode;  // mode is either 'normal' or 'demo'
     gameStarted = true;
     gameOver = false;
     health = mode === 'demo' ? 400 : 50;
@@ -340,8 +341,10 @@ function resetGame() {
     if (lamp) {
         lamp.position.set(0, 0, -10);
         lamp.userData.previousY = lamp.position.y;
-        lamp.rotation.y = Math.PI; // Reset to initial rotation
+        lamp.rotation.y = Math.PI;
     }
+    // Reset back to intro mode.
+    currentGameMode = 'intro';
     if (startMenu) {
         startMenu.style.display = 'block';
     }
@@ -354,12 +357,11 @@ window.startGame = startGame;
 function animate() {
     const dt = clock.getDelta();
 
-    // ----- Game logic: health, spawning letters, etc. -----
-    if (gameStarted && !gameOver) {
+    // In non-intro modes, update game logic.
+    if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
         let elapsedTime = (performance.now() - startTime) / 1000;
         let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
         if (!healthDecreasePaused) {
-            // In demo mode, health decreases at half the rate.
             let decreaseAmount = 10 * healthDecreaseRate * dt;
             if (currentGameMode === 'demo') {
                 decreaseAmount *= 0.5;
@@ -372,7 +374,6 @@ function animate() {
         }
         updateUI(health, score, elapsedTime);
         ambientLight.intensity = (health / 100) * 0.5;
-
         letterSpawnTimer += dt;
         if (letterSpawnTimer >= currentSpawnInterval) {
             spawnFallingLetter();
@@ -381,44 +382,32 @@ function animate() {
         }
     }
 
-    // ----- Lamp movement, jumping, rotation -----
+    // ----- Lamp Movement, Jumping, and Rotation -----
     if (lamp) {
-        if (gameStarted) {
+        if (currentGameMode !== 'intro' && gameStarted) {
             const speed = 0.15;
-
-            // 1) Get camera's forward and right vectors (flattened to Y=0)
+            // Get forward and right vectors from the camera (flattened on Y).
             const forward = new THREE.Vector3();
             camera.getWorldDirection(forward);
             forward.y = 0;
             forward.normalize();
-
             const right = new THREE.Vector3();
             right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // Build a single move vector
             let move = new THREE.Vector3();
-            if (keyStates['w']) {
-                move.add(forward);
-            }
-            if (keyStates['s']) {
-                move.sub(forward);
-            }
-            if (keyStates['a']) {
-                move.sub(right);
-            }
-            if (keyStates['d']) {
-                move.add(right);
-            }
+            if (keyStates['w']) move.add(forward);
+            if (keyStates['s']) move.sub(forward);
+            if (keyStates['a']) move.sub(right);
+            if (keyStates['d']) move.add(right);
 
-            // Move and rotate the lamp
             if (move.lengthSq() > 0) {
                 move.normalize();
                 lamp.position.addScaledVector(move, speed);
-                // Rotate the lamp to face the movement direction
+                // Rotate lamp to face movement direction.
                 lamp.lookAt(lamp.position.x + move.x, lamp.position.y, lamp.position.z + move.z);
             }
 
-            // Jump
+            // Jump when space is pressed.
             if (keyStates[' '] && !lampIsJumping) {
                 lampIsJumping = true;
                 lampInitialY = lamp.position.y;
@@ -426,16 +415,13 @@ function animate() {
                 lamp.userData.previousY = lamp.position.y - jumpStrength * dtApprox;
             }
         }
-
-        // --- Auto-Jump on Start Screen (for idle bopping) ---
-        if (!gameStarted && !lampIsJumping) {
+        // In the intro state, auto-jump for idle animation.
+        if (currentGameMode === 'intro' && !lampIsJumping) {
             lampIsJumping = true;
             lampInitialY = lamp.position.y;
             const dtApprox = 0.016;
             lamp.userData.previousY = lamp.position.y - jumpStrength * dtApprox;
         }
-
-        // --- Vertical (Jump) Integration ---
         if (lampIsJumping) {
             verletVerticalIntegration(lamp, gravity, dt);
             if (lamp.position.y < lampInitialY) {
@@ -446,8 +432,12 @@ function animate() {
         }
 
         // ----- Camera Setup -----
-        if (firstPersonView) {
-            // If in first-person, stick camera to the lamp's head
+        if (currentGameMode === 'intro') {
+            // For the intro state, use a fixed camera position.
+            camera.position.set(0, 2, 18);
+            camera.lookAt(new THREE.Vector3(0, 0, 0));
+        } else if (firstPersonView) {
+            // First-person view: attach camera to lamp’s head.
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
             const lookDirection = new THREE.Vector3(
@@ -457,24 +447,24 @@ function animate() {
             );
             camera.lookAt(lamp.position.clone().add(lookDirection));
         } else {
-            // Otherwise, third-person: revolve around the lamp based on cameraRotationX/Y
+            // Third-person view: orbit around the lamp.
             const offset = new THREE.Vector3(
                 cameraDistance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
-                cameraDistance * Math.sin(cameraRotationX) + 5,
+                cameraDistance * Math.sin(cameraRotationX) + 3, // Lower vertical offset
                 cameraDistance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
             );
             camera.position.copy(lamp.position).add(offset);
             camera.lookAt(lamp.position);
         }
 
-        // --- Lamp-Letter Collisions ---
+        // ----- Lamp-Letter Collision Handling -----
         const lampOBB = getOBB(lamp, lampCollisionScale);
         const allLetters = staticLetters.concat(fallingLetters);
         for (let i = allLetters.length - 1; i >= 0; i--) {
             const letter = allLetters[i];
             const letterOBB = getOBB(letter, letterCollisionScale);
             if (obbIntersect(lampOBB, letterOBB)) {
-                // If lamp is above letter, “squish” the letter
+                // If the lamp is above the letter, initiate a squish.
                 if (lamp.position.y > letter.position.y + 0.5) {
                     if (!letter.userData.squishing) {
                         letter.userData.squishing = true;
@@ -485,7 +475,7 @@ function animate() {
                         health = Math.min(100, health + 10);
                     }
                 } else {
-                    // Otherwise, separate them horizontally
+                    // Otherwise, separate them horizontally.
                     let diff = new THREE.Vector3(
                         lamp.position.x - letter.position.x,
                         0,
@@ -494,7 +484,6 @@ function animate() {
                     if (diff.length() > 0.001) {
                         diff.normalize();
                         let attempts = 0;
-                        // Move lamp out of collision
                         while (obbIntersect(getOBB(lamp, lampCollisionScale), letterOBB) && attempts < 10) {
                             lamp.position.x += diff.x * 0.05;
                             lamp.position.z += diff.z * 0.05;
@@ -506,7 +495,7 @@ function animate() {
         }
     }
 
-    // --- Update Falling Letters with Full Verlet Integration ---
+    // Update falling letters using full Verlet integration.
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
         const gravityAcc = new THREE.Vector3(0, -9.8, 0);
@@ -519,7 +508,7 @@ function animate() {
         }
     }
 
-    // --- Process Squishing Animations ---
+    // Process squishing animations for both static and falling letters.
     const processSquish = (letterArray) => {
         for (let i = letterArray.length - 1; i >= 0; i--) {
             const letter = letterArray[i];
@@ -538,6 +527,5 @@ function animate() {
     processSquish(staticLetters);
     processSquish(fallingLetters);
 
-    // Render the scene
     renderer.render(scene, camera);
 }
