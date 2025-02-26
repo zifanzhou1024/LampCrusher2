@@ -64,7 +64,8 @@ window.addEventListener('keyup', (event) => {
     }
 });
 window.addEventListener('mousemove', (event) => {
-    if (document.pointerLockElement === renderer.domElement) {
+    // Only apply camera look if pointer lock is active AND we're not in intro
+    if (document.pointerLockElement === renderer.domElement && currentGameMode !== 'intro') {
         const sensitivity = 0.002;
         cameraRotationX += event.movementY * sensitivity;
         cameraRotationY -= event.movementX * sensitivity;
@@ -73,9 +74,11 @@ window.addEventListener('mousemove', (event) => {
     }
 });
 window.addEventListener('wheel', (event) => {
-    event.preventDefault();
-    cameraDistance += event.deltaY * 0.01;
-    cameraDistance = Math.max(5, Math.min(50, cameraDistance));
+    if (currentGameMode !== 'intro') {
+        event.preventDefault();
+        cameraDistance += event.deltaY * 0.01;
+        cameraDistance = Math.max(5, Math.min(50, cameraDistance));
+    }
 });
 
 // Variables for jump physics.
@@ -100,9 +103,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setAnimationLoop(animate);
 document.body.appendChild(renderer.domElement);
 
-// Request pointer lock on click.
+// Only request pointer lock if not in intro state
 renderer.domElement.addEventListener('click', () => {
-    renderer.domElement.requestPointerLock();
+    if (currentGameMode !== 'intro') {
+        renderer.domElement.requestPointerLock();
+    }
 });
 
 // ----- Ground -----
@@ -210,7 +215,7 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
         (object) => {
             object.position.set(-3, 0, 5);
             object.scale.set(3, 3, 3);
-            object.rotation.y = - Math.PI / 2; // object.rotation.y = Math.PI;
+            object.rotation.y = - Math.PI / 2;
             scene.add(object);
             lamp = object;
             // Initialize vertical integration state.
@@ -240,7 +245,7 @@ function loadLetter(letter, posX, posY, posZ) {
         objLoader.setPath('assets/');
         objLoader.load(`pixar_${letter}.obj`,
             (object) => {
-                object.rotation.y = -Math.PI / 2; //object.rotation.y = -Math.PI / 2;
+                object.rotation.y = -Math.PI / 2;
                 object.position.set(posX, posY, posZ);
                 object.userData.previousPosition = object.position.clone();
                 scene.add(object);
@@ -353,6 +358,93 @@ function resetGame() {
 // Expose startGame globally for UI access.
 window.startGame = startGame;
 
+/**
+ * --------------------------------------------------------------------------
+ * PARTICLE SYSTEM IMPLEMENTATION (Smoke-like)
+ * --------------------------------------------------------------------------
+ */
+const activeParticles = [];  // Store active particle systems
+
+function spawnParticlesAt(position) {
+    const particleCount = 50;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+        // Random initial positions (small spread)
+        const randX = (Math.random() - 0.5) * 0.5;
+        const randY = Math.random() * 0.5;
+        const randZ = (Math.random() - 0.5) * 0.5;
+        positions[i * 3]     = position.x + randX;
+        positions[i * 3 + 1] = position.y + randY;
+        positions[i * 3 + 2] = position.z + randZ;
+
+        // Slight drift velocities (to look like smoke rising / moving sideways)
+        const vx = (Math.random() - 0.5) * 0.3;
+        const vy = 0.2 + Math.random() * 0.4;  // mostly upwards
+        const vz = (Math.random() - 0.5) * 0.3;
+        velocities[i * 3]     = vx;
+        velocities[i * 3 + 1] = vy;
+        velocities[i * 3 + 2] = vz;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+
+    const material = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.2,
+        transparent: true,
+        opacity: 1.0,
+        depthWrite: false  // helps blending for 'smoky' look
+    });
+
+    const points = new THREE.Points(geometry, material);
+    points.userData.startTime = performance.now();
+    points.userData.lastUpdateTime = performance.now();
+    points.userData.lifetime = 3000; // 3 seconds for a smoke-like fade
+
+    scene.add(points);
+    activeParticles.push(points);
+}
+
+function updateParticles() {
+    const now = performance.now();
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        const ps = activeParticles[i];
+        const elapsed = now - ps.userData.startTime;
+        const geometry = ps.geometry;
+        const positions = geometry.attributes.position.array;
+        const velocities = geometry.attributes.velocity.array;
+
+        // Time since last update
+        const frameDt = (now - ps.userData.lastUpdateTime) * 0.001; // convert ms to s
+        ps.userData.lastUpdateTime = now;
+
+        // Update each particle's position with velocity
+        for (let j = 0; j < positions.length; j += 3) {
+            positions[j]   += velocities[j]   * frameDt;
+            positions[j+1] += velocities[j+1] * frameDt;
+            positions[j+2] += velocities[j+2] * frameDt;
+        }
+        geometry.attributes.position.needsUpdate = true;
+
+        // Fade out over lifetime
+        const ratio = elapsed / ps.userData.lifetime;
+        if (ratio >= 1) {
+            // Lifetime over
+            scene.remove(ps);
+            activeParticles.splice(i, 1);
+        } else {
+            ps.material.opacity = 1 - ratio;  // fade from 1 to 0
+        }
+    }
+}
+/**
+ * --------------------------------------------------------------------------
+ */
+
 // ----- Animation Loop -----
 function animate() {
     const dt = clock.getDelta();
@@ -373,7 +465,11 @@ function animate() {
             displayGameOver();
         }
         updateUI(health, score, elapsedTime);
+
+        // Dim ambient light as health decreases
         ambientLight.intensity = (health / 100) * 0.5;
+
+        // Spawn letters at intervals
         letterSpawnTimer += dt;
         if (letterSpawnTimer >= currentSpawnInterval) {
             spawnFallingLetter();
@@ -384,6 +480,7 @@ function animate() {
 
     // ----- Lamp Movement, Jumping, and Rotation -----
     if (lamp) {
+        // Only allow movement if game started & not intro
         if (currentGameMode !== 'intro' && gameStarted) {
             const speed = 0.15;
             // Get forward and right vectors from the camera (flattened on Y).
@@ -422,12 +519,17 @@ function animate() {
             const dtApprox = 0.016;
             lamp.userData.previousY = lamp.position.y - jumpStrength * dtApprox;
         }
+
         if (lampIsJumping) {
             verletVerticalIntegration(lamp, gravity, dt);
+            // Check for landing
             if (lamp.position.y < lampInitialY) {
                 lamp.position.y = lampInitialY;
                 lampIsJumping = false;
                 lamp.userData.previousY = lampInitialY;
+
+                // ---- Spawn Particles on Lamp Landing ----
+                spawnParticlesAt(lamp.position.clone());
             }
         }
 
@@ -500,11 +602,15 @@ function animate() {
         const letter = fallingLetters[i];
         const gravityAcc = new THREE.Vector3(0, -9.8, 0);
         verletIntegration(letter, gravityAcc, dt);
+
+        // Check if letter has hit the ground
         if (letter.position.y < 0) {
             letter.position.y = 0;
             if (letter.userData.previousPosition) {
                 letter.userData.previousPosition.y = 0;
             }
+            // ---- Spawn Particles when a letter hits the ground ----
+            spawnParticlesAt(letter.position.clone());
         }
     }
 
@@ -526,6 +632,9 @@ function animate() {
     };
     processSquish(staticLetters);
     processSquish(fallingLetters);
+
+    // Update particle systems (fade out / remove)
+    updateParticles();
 
     renderer.render(scene, camera);
 }
