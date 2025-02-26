@@ -145,8 +145,10 @@ function halfProjection(obb, axis) {
 
 function obbIntersect(obb1, obb2) {
     let axes = [];
-    axes.push(obb1.axes[0], obb1.axes[1], obb1.axes[2],
-        obb2.axes[0], obb2.axes[1], obb2.axes[2]);
+    axes.push(
+        obb1.axes[0], obb1.axes[1], obb1.axes[2],
+        obb2.axes[0], obb2.axes[1], obb2.axes[2]
+    );
     for (let i = 0; i < 3; i++) {
         for (let j = 0; j < 3; j++) {
             let axis = new THREE.Vector3().crossVectors(obb1.axes[i], obb2.axes[j]);
@@ -206,6 +208,7 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
         (object) => {
             object.position.set(0, 0, -10);
             object.scale.set(3, 3, 3);
+            object.rotation.y = Math.PI;
             scene.add(object);
             lamp = object;
             // Initialize vertical integration state.
@@ -255,9 +258,9 @@ function loadLetter(letter, posX, posY, posZ) {
 // Load Static Letters.
 loadLetter('p', -4, 0, 0);
 loadLetter('i', -2, 0, 0);
-loadLetter('x',  0, 0, 0);
-loadLetter('a',  2, 0, 0);
-loadLetter('r',  4, 0, 0);
+loadLetter('x', 0, 0, 0);
+loadLetter('a', 2, 0, 0);
+loadLetter('r', 4, 0, 0);
 
 // ----- Dynamic Spawning of Falling Letters -----
 function loadFallingLetter(letter, posX, posY, posZ) {
@@ -337,6 +340,7 @@ function resetGame() {
     if (lamp) {
         lamp.position.set(0, 0, -10);
         lamp.userData.previousY = lamp.position.y;
+        lamp.rotation.y = Math.PI; // Reset to initial rotation
     }
     if (startMenu) {
         startMenu.style.display = 'block';
@@ -379,7 +383,6 @@ function animate() {
 
     // ----- Lamp movement, jumping, rotation -----
     if (lamp) {
-        // --- Horizontal Movement (x,z), third-person style based on camera direction ---
         if (gameStarted) {
             const speed = 0.15;
 
@@ -392,27 +395,30 @@ function animate() {
             const right = new THREE.Vector3();
             right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // 2) Build a move vector from WASD
-            let move = new THREE.Vector3(0, 0, 0);
-            if (keyStates['w']) move.add(forward);
-            if (keyStates['s']) move.sub(forward);
-            if (keyStates['a']) move.sub(right);
-            if (keyStates['d']) move.add(right);
-
-            // 3) If there's movement, rotate the lamp to face that direction and move
-            if (move.lengthSq() > 0) {
-                move.normalize();
-
-                // OLD:  const angle = -Math.atan2(move.x, move.z);
-                // FIX:  Swap the order, remove minus => correct orientation:
-                const angle = Math.atan2(move.x, -move.z);
-                lamp.rotation.y = angle;
-
-                // Move the lamp
-                lamp.position.addScaledVector(move, speed);
+            // Build a single move vector
+            let move = new THREE.Vector3();
+            if (keyStates['w']) {
+                move.add(forward);
+            }
+            if (keyStates['s']) {
+                move.sub(forward);
+            }
+            if (keyStates['a']) {
+                move.sub(right);
+            }
+            if (keyStates['d']) {
+                move.add(right);
             }
 
-            // Trigger jump on input while moving
+            // Move and rotate the lamp
+            if (move.lengthSq() > 0) {
+                move.normalize();
+                lamp.position.addScaledVector(move, speed);
+                // Rotate the lamp to face the movement direction
+                lamp.lookAt(lamp.position.x + move.x, lamp.position.y, lamp.position.z + move.z);
+            }
+
+            // Jump
             if (keyStates[' '] && !lampIsJumping) {
                 lampIsJumping = true;
                 lampInitialY = lamp.position.y;
