@@ -114,7 +114,8 @@ function obbIntersect(obb1, obb2) {
 
 // ----- Scene, Camera, Renderer Setup -----
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf0f0f0);
+// Set the background (sky) to blue #6689FF.
+scene.background = new THREE.Color(0x6689FF);
 
 const camera = new THREE.PerspectiveCamera(
     75, window.innerWidth / window.innerHeight, 0.1, 1000
@@ -126,32 +127,41 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setAnimationLoop(animate);
 document.body.appendChild(renderer.domElement);
 
-// Request pointer lock on click to enable mouse control.
+// Request pointer lock on click.
 renderer.domElement.addEventListener('click', () => {
     renderer.domElement.requestPointerLock();
 });
 
 // ----- Ground -----
+// Ground material color set to blue #6689FF.
 const groundGeometry = new THREE.PlaneGeometry(200, 200);
-const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x808080 });
+const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x6689FF });
 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = 0;
 scene.add(ground);
 
 // ----- Lights -----
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+// Ambient light color set to blue #6689FF.
+const ambientLight = new THREE.AmbientLight(0x6689FF, 0.5);
 scene.add(ambientLight);
 
-const lampLight = new THREE.PointLight(0xffaa00, 1, 100);
-lampLight.position.set(0, 2, 0);
+// Create a spotlight for the lamp that is pure white and 3x brighter than before.
+// Its cone angle is 45°.
+const lampLight = new THREE.SpotLight(0xffffff, 6, 100, Math.PI / 4, 0.1, 1);
+// Set the spotlight to be emitted from the center of the lamp.
+lampLight.position.set(0, 0, 0);
+// Set the target so that the beam shoots forward (assumed -Z) and 45° downward.
+// Here, the target is set to (0, -1, -1) relative to the lamp.
+lampLight.target.position.set(0, -1, -1);
 scene.add(lampLight);
+scene.add(lampLight.target);
 
 // ----- Global Variables for Lamp Control -----
 let lamp = null; // the lamp object once loaded.
 const keyStates = {};
 let firstPersonView = false;  // default to third-person view.
-let vKeyPressed = false;      // to prevent continuous toggling.
+let vKeyPressed = false;      // prevent continuous toggling.
 
 const staticLetters = [];
 const fallingLetters = [];
@@ -213,6 +223,9 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
             object.scale.set(3, 3, 3);
             scene.add(object);
             lamp = object;
+            // Attach the spotlight to the lamp so it emits from its center.
+            lamp.add(lampLight);
+            lamp.add(lampLight.target);
         },
         (xhr) => {
             console.log((xhr.loaded / xhr.total * 100) + '% loaded for lamp');
@@ -257,7 +270,6 @@ loadLetter('a',  2, 0, 0);
 loadLetter('r',  4, 0, 0);
 
 // ----- Dynamic Spawning of Falling Letters -----
-// Modified so that letters spawn based on a timer in the animate loop.
 function loadFallingLetter(letter, posX, posY, posZ) {
     const mtlLoader = new MTLLoader();
     mtlLoader.setPath('assets/');
@@ -343,16 +355,12 @@ function startGame() {
     startTime = performance.now();
     letterSpawnTimer = 0;
     currentSpawnInterval = 2;
-    // Hide start menu.
     startMenu.style.display = 'none';
 }
 
 function resetGame() {
-    // Remove any game over overlay.
     const gameOverDiv = document.getElementById('gameOver');
     if (gameOverDiv) gameOverDiv.remove();
-
-    // Reset game state and remove falling letters.
     gameStarted = false;
     gameOver = false;
     health = 100;
@@ -360,14 +368,11 @@ function resetGame() {
     startTime = 0;
     letterSpawnTimer = 0;
     currentSpawnInterval = 2;
-    // Remove falling letters from scene.
     fallingLetters.forEach(letter => scene.remove(letter));
     fallingLetters.length = 0;
-    // Optionally, reset lamp position.
     if (lamp) {
         lamp.position.set(0, 0, -10);
     }
-    // Show start menu again.
     startMenu.style.display = 'block';
 }
 
@@ -375,11 +380,8 @@ function resetGame() {
 function animate() {
     const dt = clock.getDelta();
 
-    // Only update game logic if game has started.
     if (gameStarted && !gameOver) {
-        // ---------- Health Decrease & Timer -----------
-        let elapsedTime = (performance.now() - startTime) / 1000; // seconds elapsed
-        // Decrease health over time; rate increases with time.
+        let elapsedTime = (performance.now() - startTime) / 1000;
         let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
         health -= 10 * healthDecreaseRate * dt;
         if (health <= 0) {
@@ -387,20 +389,16 @@ function animate() {
             gameOver = true;
             displayGameOver();
         }
-        // Update UI.
         healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score}`;
-
-        // ---------- Difficulty Scaling & Letter Spawning -----------
+        ambientLight.intensity = (health / 100) * 0.5;
         letterSpawnTimer += dt;
         if (letterSpawnTimer >= currentSpawnInterval) {
             spawnFallingLetter();
             letterSpawnTimer = 0;
-            // Decrease spawn interval over time (min 0.5 seconds).
             currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
         }
     }
 
-    // ---------- Lamp Movement ----------
     if (lamp) {
         const speed = 0.15;
         const forward = new THREE.Vector3();
@@ -420,7 +418,6 @@ function animate() {
             lamp.position.add(move.multiplyScalar(speed));
             lamp.rotation.y = Math.atan2(move.x, move.z);
         }
-        // ---------- Lamp Jump Movement ----------
         if (keyStates[' '] && !lampIsJumping) {
             lampJumpVelocity = jumpStrength;
             lampIsJumping = true;
@@ -435,8 +432,7 @@ function animate() {
                 lampJumpVelocity = 0;
             }
         }
-        lampLight.position.set(lamp.position.x, lamp.position.y + 2, lamp.position.z);
-        // ---------- Camera Control ----------
+        lampLight.position.set(lamp.position.x, lamp.position.y, lamp.position.z);
         if (firstPersonView) {
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
@@ -457,7 +453,6 @@ function animate() {
         }
     }
 
-    // ---------- Collision Detection & Squish Animation ----------
     if (lamp) {
         const lampOBB = getOBB(lamp, lampCollisionScale);
         const allLetters = staticLetters.concat(fallingLetters);
@@ -465,19 +460,16 @@ function animate() {
             const letter = allLetters[i];
             const letterOBB = getOBB(letter, letterCollisionScale);
             if (obbIntersect(lampOBB, letterOBB)) {
-                // If lamp is descending and coming from above the letter, trigger squish.
                 if (lampJumpVelocity < 0 && lamp.position.y > letter.position.y + 0.5) {
                     if (!letter.userData.squishing) {
                         letter.userData.squishing = true;
                         letter.userData.squishElapsed = 0;
                         letter.userData.squishDuration = squishDuration;
                         letter.userData.originalScale = letter.scale.clone();
-                        // Increase score and restore some health upon a successful crush.
                         score += 10;
                         health = Math.min(100, health + 10);
                     }
                 } else {
-                    // Otherwise, nudge the lamp horizontally (XZ) to resolve penetration.
                     let diff = new THREE.Vector3(lamp.position.x - letter.position.x, 0, lamp.position.z - letter.position.z);
                     if (diff.length() > 0.001) {
                         diff.normalize();
@@ -493,7 +485,6 @@ function animate() {
         }
     }
 
-    // ---------- Update Falling Letters Movement ----------
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
         letter.userData.velocityY += -4.9 * dt;
@@ -503,7 +494,6 @@ function animate() {
         }
     }
 
-    // ---------- Update Squish Animation for All Letters ----------
     const processSquish = (letterArray) => {
         for (let i = letterArray.length - 1; i >= 0; i--) {
             const letter = letterArray[i];
