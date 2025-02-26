@@ -88,7 +88,7 @@ const clock = new THREE.Clock();
 
 // ----- Three.js Scene Setup -----
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x6689FF);
+scene.background = new THREE.Color(0x087CEEB);
 
 const camera = new THREE.PerspectiveCamera(
     75, window.innerWidth / window.innerHeight, 0.1, 1000
@@ -107,14 +107,14 @@ renderer.domElement.addEventListener('click', () => {
 
 // ----- Ground -----
 const groundGeometry = new THREE.PlaneGeometry(200, 200);
-const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x6689FF });
+const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x87CEEB });
 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = 0;
 scene.add(ground);
 
 // ----- Lights -----
-const ambientLight = new THREE.AmbientLight(0x6689FF, 0.5);
+const ambientLight = new THREE.AmbientLight(0xBBDEFB, 1.5);
 scene.add(ambientLight);
 
 const lampLight = new THREE.SpotLight(0xffffff, 6, 100, Math.PI / 4, 0.1, 1);

@@ -15,7 +15,7 @@ export function initializeUI() {
     startMenu.style.zIndex = '9999';
 
     const titleElement = document.createElement('h1');
-    titleElement.textContent = 'Lamp Crusher';
+    titleElement.textContent = 'Lamp Crusher 2';
     titleElement.style.color = 'white';
     titleElement.style.marginBottom = '20px';
 
