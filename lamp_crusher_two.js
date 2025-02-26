@@ -1,8 +1,11 @@
+// lamp_crusher_two.js
+
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen } from './ui.js';
 
-// ---------- Game State & UI Variables --------------
+// ---------- Game State Variables --------------
 let gameStarted = false;
 let gameOver = false;
 let health = 100;
@@ -12,69 +15,100 @@ let letterSpawnTimer = 0;          // accumulates time for spawning falling lett
 let currentSpawnInterval = 2;      // initial spawn interval (in seconds)
 let currentGameMode = 'normal';    // 'normal' or 'demo'
 
-// Create UI elements: Start Menu and Health/Score overlay.
-const startMenu = document.createElement('div');
-startMenu.id = 'startMenu';
-startMenu.style.position = 'absolute';
-startMenu.style.top = '50%';
-startMenu.style.left = '50%';
-startMenu.style.transform = 'translate(-50%, -50%)';
-startMenu.style.textAlign = 'center';
-startMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-startMenu.style.padding = '20px';
-startMenu.style.borderRadius = '10px';
-startMenu.style.zIndex = '9999';
+// Initialize UI elements.
+const { startMenu } = initializeUI();
 
-const titleElement = document.createElement('h1');
-titleElement.textContent = 'Lamp Crusher';
-titleElement.style.color = 'white';
-titleElement.style.marginBottom = '20px';
+// ----- Global Variables for Lamp Control -----
+let lamp = null; // the lamp object once loaded.
+const keyStates = {};
+let firstPersonView = false;  // default to third-person view.
+let vKeyPressed = false;      // prevent continuous toggling.
 
-const startButton = document.createElement('button');
-startButton.textContent = 'Start Game';
-startButton.style.padding = '10px 20px';
-startButton.style.fontSize = '18px';
-startButton.style.backgroundColor = '#4CAF50';
-startButton.style.color = 'white';
-startButton.style.border = 'none';
-startButton.style.borderRadius = '5px';
-startButton.style.cursor = 'pointer';
-startButton.addEventListener('click', () => startGame('normal'));
+const staticLetters = [];
+const fallingLetters = [];
 
-const demoButton = document.createElement('button');
-demoButton.textContent = 'Demo Mode';
-demoButton.style.padding = '10px 20px';
-demoButton.style.fontSize = '18px';
-demoButton.style.backgroundColor = '#4CAF50';
-demoButton.style.color = 'white';
-demoButton.style.border = 'none';
-demoButton.style.borderRadius = '5px';
-demoButton.style.cursor = 'pointer';
-demoButton.style.marginLeft = '10px';
-demoButton.addEventListener('click', () => startGame('demo'));
+let cameraRotationX = 0;
+let cameraRotationY = 0;
+let cameraDistance = 15;
 
-startMenu.appendChild(titleElement);
-startMenu.appendChild(startButton);
-startMenu.appendChild(demoButton);
-document.body.appendChild(startMenu);
+// ---------- Event Listeners ----------
+window.addEventListener('keydown', (event) => {
+    const key = event.key.toLowerCase();
+    keyStates[key] = true;
+    if (key === 'v' && !vKeyPressed) {
+        firstPersonView = !firstPersonView;
+        vKeyPressed = true;
+        console.log("View mode toggled. First-person:", firstPersonView);
+    }
+});
+window.addEventListener('keyup', (event) => {
+    const key = event.key.toLowerCase();
+    keyStates[key] = false;
+    if (key === 'v') {
+        vKeyPressed = false;
+    }
+});
+window.addEventListener('mousemove', (event) => {
+    if (document.pointerLockElement === renderer.domElement) {
+        const sensitivity = 0.002;
+        cameraRotationX += event.movementY * sensitivity;
+        cameraRotationY -= event.movementX * sensitivity;
+        cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
+    }
+});
+window.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    cameraDistance += event.deltaY * 0.01;
+    cameraDistance = Math.max(5, Math.min(50, cameraDistance));
+});
 
-const healthAndScoreElement = document.createElement('div');
-healthAndScoreElement.id = 'healthAndScore';
-healthAndScoreElement.style.position = 'absolute';
-healthAndScoreElement.style.top = '10px';
-healthAndScoreElement.style.left = '50%';
-healthAndScoreElement.style.transform = 'translateX(-50%)';
-healthAndScoreElement.style.color = 'white';
-healthAndScoreElement.style.fontSize = '20px';
-healthAndScoreElement.style.fontFamily = 'Arial, sans-serif';
-healthAndScoreElement.style.zIndex = '9999';
-healthAndScoreElement.textContent = `Health: ${health} | Score: ${score} | Time: 0 s`;
-document.body.appendChild(healthAndScoreElement);
+// Variables for jump physics.
+let lampJumpVelocity = 0;
+let lampIsJumping = false;
+const gravity = -9.8;
+const jumpStrength = 6;
+let lampInitialY = 0;
 
-// ---------- End of Game State & UI Variables --------------
+const clock = new THREE.Clock();
 
+// ----- Three.js Scene Setup -----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x6689FF);  // Blue background
 
-// ----- Custom OBB Functions with Collision Scale -----
+const camera = new THREE.PerspectiveCamera(
+    75, window.innerWidth / window.innerHeight, 0.1, 1000
+);
+camera.position.set(0, 5, 15);
+
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setAnimationLoop(animate);
+document.body.appendChild(renderer.domElement);
+
+// Request pointer lock on click.
+renderer.domElement.addEventListener('click', () => {
+    renderer.domElement.requestPointerLock();
+});
+
+// ----- Ground -----
+const groundGeometry = new THREE.PlaneGeometry(200, 200);
+const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x6689FF });
+const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = 0;
+scene.add(ground);
+
+// ----- Lights -----
+const ambientLight = new THREE.AmbientLight(0x6689FF, 0.5);
+scene.add(ambientLight);
+
+const lampLight = new THREE.SpotLight(0xffffff, 6, 100, Math.PI / 4, 0.1, 1);
+lampLight.position.set(0, 0, 5);
+lampLight.target.position.set(0, -1, 10);
+scene.add(lampLight);
+scene.add(lampLight.target);
+
+// ----- Custom OBB Functions -----
 function getOBB(object, collisionScale = 1) {
     object.updateWorldMatrix(true, false);
     let aabb = new THREE.Box3().setFromObject(object);
@@ -82,9 +116,7 @@ function getOBB(object, collisionScale = 1) {
     aabb.getCenter(center);
     let size = new THREE.Vector3();
     aabb.getSize(size);
-    // Scale down the halfSizes to tighten the collision volume.
     let halfSizes = size.multiplyScalar(0.5).multiplyScalar(collisionScale);
-    // Extract the local axes from the object's world matrix.
     let m = object.matrixWorld;
     let axes = [
         new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
@@ -126,99 +158,6 @@ function obbIntersect(obb1, obb2) {
     return true;
 }
 
-// ----- Scene, Camera, Renderer Setup -----
-const scene = new THREE.Scene();
-// Set the background (sky) to blue #6689FF.
-scene.background = new THREE.Color(0x6689FF);
-
-const camera = new THREE.PerspectiveCamera(
-    75, window.innerWidth / window.innerHeight, 0.1, 1000
-);
-camera.position.set(0, 5, 15);
-
-const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setAnimationLoop(animate);
-document.body.appendChild(renderer.domElement);
-
-// Request pointer lock on click.
-renderer.domElement.addEventListener('click', () => {
-    renderer.domElement.requestPointerLock();
-});
-
-// ----- Ground -----
-const groundGeometry = new THREE.PlaneGeometry(200, 200);
-const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x6689FF });
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = 0;
-scene.add(ground);
-
-// ----- Lights -----
-// Ambient light color set to blue #6689FF.
-const ambientLight = new THREE.AmbientLight(0x6689FF, 0.5);
-scene.add(ambientLight);
-
-// Create a spotlight for the lamp that is pure white and 3x brighter than before.
-// Its cone angle is 45°.
-const lampLight = new THREE.SpotLight(0xffffff, 6, 100, Math.PI / 4, 0.1, 1);
-lampLight.position.set(0, 0, 5);
-lampLight.target.position.set(0, -1, 10);
-scene.add(lampLight);
-scene.add(lampLight.target);
-
-// ----- Global Variables for Lamp Control -----
-let lamp = null; // the lamp object once loaded.
-const keyStates = {};
-let firstPersonView = false;  // default to third-person view.
-let vKeyPressed = false;      // prevent continuous toggling.
-
-const staticLetters = [];
-const fallingLetters = [];
-
-let cameraRotationX = 0;
-let cameraRotationY = 0;
-let cameraDistance = 15;
-
-window.addEventListener('keydown', (event) => {
-    const key = event.key.toLowerCase();
-    keyStates[key] = true;
-    if (key === 'v' && !vKeyPressed) {
-        firstPersonView = !firstPersonView;
-        vKeyPressed = true;
-        console.log("View mode toggled. First-person:", firstPersonView);
-    }
-});
-window.addEventListener('keyup', (event) => {
-    const key = event.key.toLowerCase();
-    keyStates[key] = false;
-    if (key === 'v') {
-        vKeyPressed = false;
-    }
-});
-window.addEventListener('mousemove', (event) => {
-    if (document.pointerLockElement === renderer.domElement) {
-        const sensitivity = 0.002;
-        cameraRotationX += event.movementY * sensitivity;
-        cameraRotationY -= event.movementX * sensitivity;
-        cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
-    }
-});
-window.addEventListener('wheel', (event) => {
-    event.preventDefault();
-    cameraDistance += event.deltaY * 0.01;
-    cameraDistance = Math.max(5, Math.min(50, cameraDistance));
-});
-
-// Variables for jump physics.
-let lampJumpVelocity = 0;
-let lampIsJumping = false;
-const gravity = -9.8;
-const jumpStrength = 6; // Make the lamp jump higher.
-let lampInitialY = 0;
-
-const clock = new THREE.Clock();
-
 // ----- Load the Lamp Model (OBJ + MTL) -----
 const mtlLoaderLamp = new MTLLoader();
 mtlLoaderLamp.setPath('assets/');
@@ -233,10 +172,8 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
             object.scale.set(3, 3, 3);
             scene.add(object);
             lamp = object;
-            // Attach the spotlight to the lamp so it always emits from its front.
             lampLight.position.set(0, 0.65, 0);
             lamp.add(lampLight);
-            // Adjust the target relative to the lamp.
             lampLight.target.position.set(0, -1, 10);
             lamp.add(lampLight.target);
         },
@@ -275,7 +212,7 @@ function loadLetter(letter, posX, posY, posZ) {
     });
 }
 
-// ----- Load Static Letters (remain on the ground) -----
+// Load Static Letters.
 loadLetter('p', -4, 0, 0);
 loadLetter('i', -2, 0, 0);
 loadLetter('x',  0, 0, 0);
@@ -309,6 +246,7 @@ function loadFallingLetter(letter, posX, posY, posZ) {
         );
     });
 }
+
 function spawnFallingLetter() {
     if (!gameStarted || gameOver) return;
     const letters = ['p', 'i', 'x', 'a', 'r'];
@@ -324,42 +262,12 @@ const squishDuration = 0.5;
 const lampCollisionScale = 0.8;
 const letterCollisionScale = 0.9;
 
-// ---------- Game Over Screen --------------
+// ---------- Game Over and Reset Functions ----------
 function displayGameOver() {
-    const gameOverDiv = document.createElement('div');
-    gameOverDiv.id = 'gameOver';
-    gameOverDiv.style.position = 'absolute';
-    gameOverDiv.style.top = '50%';
-    gameOverDiv.style.left = '50%';
-    gameOverDiv.style.transform = 'translate(-50%, -50%)';
-    gameOverDiv.style.textAlign = 'center';
-    gameOverDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-    gameOverDiv.style.padding = '20px';
-    gameOverDiv.style.borderRadius = '10px';
-    gameOverDiv.style.zIndex = '9999';
-
-    const gameOverText = document.createElement('h1');
-    gameOverText.textContent = 'Game Over';
-    gameOverText.style.color = 'white';
-    gameOverText.style.marginBottom = '20px';
-
-    const playAgainButton = document.createElement('button');
-    playAgainButton.textContent = 'Play Again';
-    playAgainButton.style.padding = '10px 20px';
-    playAgainButton.style.fontSize = '18px';
-    playAgainButton.style.backgroundColor = '#4CAF50';
-    playAgainButton.style.color = 'white';
-    playAgainButton.style.border = 'none';
-    playAgainButton.style.borderRadius = '5px';
-    playAgainButton.style.cursor = 'pointer';
-    playAgainButton.addEventListener('click', resetGame);
-
-    gameOverDiv.appendChild(gameOverText);
-    gameOverDiv.appendChild(playAgainButton);
-    document.body.appendChild(gameOverDiv);
+    gameOver = true;
+    displayGameOverScreen(resetGame);
 }
 
-// ---------- Start and Reset Game Functions --------------
 function startGame(mode = 'normal') {
     currentGameMode = mode;
     gameStarted = true;
@@ -369,12 +277,13 @@ function startGame(mode = 'normal') {
     startTime = performance.now();
     letterSpawnTimer = 0;
     currentSpawnInterval = 2;
-    startMenu.style.display = 'none';
+    if (startMenu) {
+        startMenu.style.display = 'none';
+    }
 }
 
 function resetGame() {
-    const gameOverDiv = document.getElementById('gameOver');
-    if (gameOverDiv) gameOverDiv.remove();
+    removeGameOverScreen();
     gameStarted = false;
     gameOver = false;
     health = currentGameMode === 'demo' ? 200 : 50;
@@ -387,8 +296,13 @@ function resetGame() {
     if (lamp) {
         lamp.position.set(0, 0, -10);
     }
-    startMenu.style.display = 'block';
+    if (startMenu) {
+        startMenu.style.display = 'block';
+    }
 }
+
+// Expose startGame globally for UI access.
+window.startGame = startGame;
 
 // ----- Animation Loop -----
 function animate() {
@@ -400,11 +314,9 @@ function animate() {
         health -= 10 * healthDecreaseRate * dt;
         if (health <= 0) {
             health = 0;
-            gameOver = true;
             displayGameOver();
         }
-        // Update UI to include timer (in seconds)
-        healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score} | Time: ${elapsedTime.toFixed(2)} s`;
+        updateUI(health, score, elapsedTime);
         ambientLight.intensity = (health / 100) * 0.5;
         letterSpawnTimer += dt;
         if (letterSpawnTimer >= currentSpawnInterval) {
@@ -415,7 +327,7 @@ function animate() {
     }
 
     if (lamp) {
-        // Auto jumping mechanism when game is not started
+        // Auto jump when game not started.
         if (!gameStarted && !lampIsJumping) {
             lampJumpVelocity = jumpStrength;
             lampIsJumping = true;
