@@ -2,6 +2,66 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
+// ----- Custom OBB Functions -----
+// Compute an OBB from an Object3D using its world-transformed bounding box.
+function getOBB(object) {
+    // Ensure world matrix is updated
+    object.updateWorldMatrix(true, false);
+    // Compute AABB in world space
+    let aabb = new THREE.Box3().setFromObject(object);
+    let center = new THREE.Vector3();
+    aabb.getCenter(center);
+    let size = new THREE.Vector3();
+    aabb.getSize(size);
+    let halfSizes = size.multiplyScalar(0.5);
+    // Extract the local axes from the object's world matrix
+    let m = object.matrixWorld;
+    let axes = [
+        new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
+        new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).normalize(),
+        new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).normalize()
+    ];
+    return { center, axes, halfSizes };
+}
+
+// For a given OBB, compute its projection radius on an axis.
+function halfProjection(obb, axis) {
+    return obb.halfSizes.x * Math.abs(axis.dot(obb.axes[0])) +
+        obb.halfSizes.y * Math.abs(axis.dot(obb.axes[1])) +
+        obb.halfSizes.z * Math.abs(axis.dot(obb.axes[2]));
+}
+
+// Separating Axis Theorem test for two OBBs.
+function obbIntersect(obb1, obb2) {
+    let axes = [];
+    // Add the three axes of each box.
+    axes.push(obb1.axes[0], obb1.axes[1], obb1.axes[2],
+        obb2.axes[0], obb2.axes[1], obb2.axes[2]);
+    // Add cross products of each pair (if nonzero).
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            let axis = new THREE.Vector3().crossVectors(obb1.axes[i], obb2.axes[j]);
+            if (axis.lengthSq() > 1e-6) {
+                axis.normalize();
+                axes.push(axis);
+            }
+        }
+    }
+    // Compute the translation vector between the centers.
+    let tVec = new THREE.Vector3().subVectors(obb2.center, obb1.center);
+    // Test for separation along each axis.
+    for (let i = 0; i < axes.length; i++) {
+        let axis = axes[i];
+        let r1 = halfProjection(obb1, axis);
+        let r2 = halfProjection(obb2, axis);
+        let t = Math.abs(tVec.dot(axis));
+        if (t > r1 + r2) {
+            return false; // Found a separating axis.
+        }
+    }
+    return true; // No separating axis found.
+}
+
 // ----- Scene, Camera, Renderer Setup -----
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf0f0f0);
@@ -16,7 +76,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setAnimationLoop(animate);
 document.body.appendChild(renderer.domElement);
 
-// Request pointer lock on click to enable mouse control
+// Request pointer lock on click to enable mouse control.
 renderer.domElement.addEventListener('click', () => {
     renderer.domElement.requestPointerLock();
 });
@@ -38,17 +98,16 @@ lampLight.position.set(0, 2, 0);
 scene.add(lampLight);
 
 // ----- Global Variables for Lamp Control -----
-let lamp = null; // will store the lamp object once loaded
+let lamp = null; // Will store the lamp object once loaded.
 const keyStates = {};
-let firstPersonView = false;  // default to third-person view
-let vKeyPressed = false;      // flag to prevent continuous toggling
+let firstPersonView = false;  // default to third-person view.
+let vKeyPressed = false;      // flag to prevent continuous toggling.
 
-// Arrays to keep track of letters for collision/squish animation
+// Arrays to keep track of letters for collision and squish animation.
 const staticLetters = [];
 const fallingLetters = [];
 
-
-// Mouse-controlled camera rotation angles (in radians)
+// Mouse-controlled camera rotation angles (in radians).
 let cameraRotationX = 0;
 let cameraRotationY = 0;
 
@@ -75,23 +134,22 @@ window.addEventListener('mousemove', (event) => {
         const sensitivity = 0.002;
         cameraRotationX += event.movementY * sensitivity;
         cameraRotationY -= event.movementX * sensitivity;
-        // Clamp vertical rotation to avoid flipping
         cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
     }
 });
 
-// Variables for jump physics
+// Variables for jump physics.
 let lampJumpVelocity = 0;
 let lampIsJumping = false;
-const gravity = -9.8;    // gravity acceleration (adjust as needed)
-const jumpStrength = 5;  // initial upward velocity for jump
-let lampInitialY = 0;    // record starting Y position
+const gravity = -9.8;
+const jumpStrength = 5;
+let lampInitialY = 0;
 
-// THREE.Clock for delta time
+// THREE.Clock for delta time.
 const clock = new THREE.Clock();
 
 // ----- Load the Lamp Model (OBJ + MTL) -----
-// NOTE: Lamp is now scaled 3× instead of 2×.
+// Lamp is scaled 3× and now starts at (0, 0, -10) to avoid immediate intersections.
 const mtlLoaderLamp = new MTLLoader();
 mtlLoaderLamp.setPath('assets/');
 mtlLoaderLamp.load('lamp.mtl', (materials) => {
@@ -101,9 +159,7 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
     objLoaderLamp.setPath('assets/');
     objLoaderLamp.load('lamp.obj',
         (object) => {
-            // Position such that the base is on the ground
-            object.position.set(0, 0, 0);
-            // Scale the lamp 3x larger now
+            object.position.set(0, 0, -10);
             object.scale.set(3, 3, 3);
             scene.add(object);
             lamp = object;
@@ -112,7 +168,7 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
             console.log((xhr.loaded / xhr.total * 100) + '% loaded for lamp');
         },
         (error) => {
-            console.error('An error occurred while loading the lamp:', error);
+            console.error('Error loading lamp:', error);
         }
     );
 });
@@ -128,19 +184,16 @@ function loadLetter(letter, posX, posY, posZ) {
         objLoader.setPath('assets/');
         objLoader.load(`pixar_${letter}.obj`,
             (object) => {
-                // Rotate the letter 90° to the left about Y so its front faces forward
                 object.rotation.y = -Math.PI / 2;
-                // Place the letter so its base is on the ground
                 object.position.set(posX, posY, posZ);
                 scene.add(object);
-                // Save for collision detection and squish animation
                 staticLetters.push(object);
             },
             (xhr) => {
                 console.log(`Letter ${letter}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
             },
             (error) => {
-                console.error(`An error occurred while loading letter ${letter}:`, error);
+                console.error(`Error loading letter ${letter}:`, error);
             }
         );
     });
@@ -154,8 +207,7 @@ loadLetter('a',  2, 0, 0);
 loadLetter('r',  4, 0, 0);
 
 // ----- Dynamic Spawning of Falling Letters -----
-const letterGravity = -4.9; // gravity constant for falling letters
-
+const letterGravity = -4.9;
 function loadFallingLetter(letter, posX, posY, posZ) {
     const mtlLoader = new MTLLoader();
     mtlLoader.setPath('assets/');
@@ -166,13 +218,9 @@ function loadFallingLetter(letter, posX, posY, posZ) {
         objLoader.setPath('assets/');
         objLoader.load(`pixar_${letter}.obj`,
             (object) => {
-                // Rotate the letter 90° to the left so its front faces forward
                 object.rotation.y = -Math.PI / 2;
-                // Set the starting position for the falling letter
                 object.position.set(posX, posY, posZ);
-                // Initialize its downward velocity (stored in userData)
                 object.userData.velocityY = 0;
-                // For squish animation: flag and timer
                 object.userData.squishing = false;
                 scene.add(object);
                 fallingLetters.push(object);
@@ -186,23 +234,18 @@ function loadFallingLetter(letter, posX, posY, posZ) {
         );
     });
 }
-
 function spawnFallingLetter() {
     const letters = ['p', 'i', 'x', 'a', 'r'];
     const randomLetter = letters[Math.floor(Math.random() * letters.length)];
-    // Randomize x and z positions within a chosen range (e.g., [-10, 10])
     const posX = Math.random() * 20 - 10;
-    const posY = 20; // Spawn high above the ground
+    const posY = 20;
     const posZ = Math.random() * 20 - 10;
     loadFallingLetter(randomLetter, posX, posY, posZ);
 }
-
-// Spawn a new falling letter every 2 seconds
 setInterval(spawnFallingLetter, 2000);
 
 // ----- Collision & Squish Animation Parameters -----
-const collisionThreshold = 1;      // horizontal distance threshold for collision
-const squishDuration = 1;          // duration (in seconds) for squish animation
+const squishDuration = 1;
 
 // ----- Animation Loop -----
 function animate() {
@@ -210,34 +253,25 @@ function animate() {
 
     if (lamp) {
         const speed = 0.1;
-
-        // Compute the forward vector from the camera, ignoring the vertical component
+        // --- Lamp Movement ---
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0;
         forward.normalize();
-
-        // Compute the right vector (perpendicular to forward)
         const right = new THREE.Vector3();
         right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
         right.normalize();
-
-        // Calculate movement vector based on key states
         let move = new THREE.Vector3();
         if (keyStates['w']) move.add(forward);
         if (keyStates['s']) move.sub(forward);
         if (keyStates['a']) move.sub(right);
         if (keyStates['d']) move.add(right);
-
-        // If there is any movement, update lamp's position and rotation
         if (move.length() > 0) {
             move.normalize();
             lamp.position.add(move.multiplyScalar(speed));
-            // Set lamp rotation so it faces the direction of movement
             lamp.rotation.y = Math.atan2(move.x, move.z);
         }
-
-        // ----- Jump Movement -----
+        // --- Lamp Jump Movement ---
         if (keyStates[' '] && !lampIsJumping) {
             lampJumpVelocity = jumpStrength;
             lampIsJumping = true;
@@ -252,15 +286,11 @@ function animate() {
                 lampJumpVelocity = 0;
             }
         }
-
-        // Update the lamp's point light to follow (with offset)
         lampLight.position.set(lamp.position.x, lamp.position.y + 2, lamp.position.z);
-
-        // ----- Camera Control -----
+        // --- Camera Control ---
         if (firstPersonView) {
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
-            // Compute look direction from mouse angles for first-person view
             const lookDirection = new THREE.Vector3(
                 Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
                 Math.sin(cameraRotationX),
@@ -268,7 +298,6 @@ function animate() {
             );
             camera.lookAt(lamp.position.clone().add(lookDirection));
         } else {
-            // Third-person view: camera orbits around the lamp based on mouse angles
             const distance = 15;
             const offset = new THREE.Vector3(
                 distance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
@@ -280,55 +309,67 @@ function animate() {
         }
     }
 
-    // ----- Update Falling Letters Movement -----
+    // --- Robust OBB Collision Detection & Response ---
+    if (lamp) {
+        const lampOBB = getOBB(lamp);
+        const allLetters = staticLetters.concat(fallingLetters);
+        for (let i = allLetters.length - 1; i >= 0; i--) {
+            const letter = allLetters[i];
+            const letterOBB = getOBB(letter);
+            if (obbIntersect(lampOBB, letterOBB)) {
+                // If lamp is descending and coming from above the letter, trigger squish.
+                if (lampJumpVelocity < 0 && lamp.position.y > letter.position.y + 0.5) {
+                    if (!letter.userData.squishing) {
+                        letter.userData.squishing = true;
+                        letter.userData.squishElapsed = 0;
+                        letter.userData.squishDuration = squishDuration;
+                        letter.userData.originalScale = letter.scale.clone();
+                    }
+                } else {
+                    // Otherwise, nudge the lamp horizontally (XZ) to resolve penetration.
+                    let diff = new THREE.Vector3(lamp.position.x - letter.position.x, 0, lamp.position.z - letter.position.z);
+                    if (diff.length() > 0.001) {
+                        diff.normalize();
+                        let attempts = 0;
+                        while (obbIntersect(getOBB(lamp), letterOBB) && attempts < 10) {
+                            lamp.position.x += diff.x * 0.05;
+                            lamp.position.z += diff.z * 0.05;
+                            attempts++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Update Falling Letters Movement ---
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
-        // Update its vertical velocity with gravity
         letter.userData.velocityY += letterGravity * dt;
-        // Move the letter downwards based on its velocity
         letter.position.y += letter.userData.velocityY * dt;
-        // If the falling letter reaches the ground, clamp its y position (it will still be interactable)
         if (letter.position.y <= 0) {
             letter.position.y = 0;
         }
     }
 
-    // ----- Collision Detection & Squish Animation for All Letters -----
-    // Process both static and falling letters for collision with the lamp.
-    [staticLetters, fallingLetters].forEach(letterArray => {
+    // --- Update Squish Animation for All Letters ---
+    const processSquish = (letterArray) => {
         for (let i = letterArray.length - 1; i >= 0; i--) {
             const letter = letterArray[i];
-            // If the letter hasn't started squishing and the lamp is falling (jumping downward)
-            if (!letter.userData.squishing && lampJumpVelocity < 0) {
-                // Check horizontal distance (in XZ plane)
-                const dx = lamp.position.x - letter.position.x;
-                const dz = lamp.position.z - letter.position.z;
-                const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
-                // Also check that the lamp is coming from above the letter
-                if (horizontalDistance < collisionThreshold && lamp.position.y > letter.position.y + 1) {
-                    // Trigger squish animation on the letter
-                    letter.userData.squishing = true;
-                    letter.userData.squishElapsed = 0;
-                    letter.userData.squishDuration = squishDuration;
-                    letter.userData.originalScale = letter.scale.clone();
-                }
-            }
-            // If the letter is in the process of squishing, update its animation
             if (letter.userData.squishing) {
                 letter.userData.squishElapsed += dt;
                 let progress = letter.userData.squishElapsed / letter.userData.squishDuration;
                 if (progress > 1) progress = 1;
-                // Gradually reduce the vertical scale (down to 10% of its original height)
                 letter.scale.y = letter.userData.originalScale.y * (1 - 0.9 * progress);
-                // Optionally, you could also adjust material opacity here if desired.
-                // Once squish animation is complete, remove the letter.
                 if (progress >= 1) {
                     scene.remove(letter);
                     letterArray.splice(i, 1);
                 }
             }
         }
-    });
+    };
+    processSquish(staticLetters);
+    processSquish(fallingLetters);
 
     renderer.render(scene, camera);
 }
