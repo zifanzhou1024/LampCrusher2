@@ -13,12 +13,12 @@ let score = 0;
 let startTime = 0;
 let letterSpawnTimer = 0;
 let currentSpawnInterval = 2;
-// Game mode is now one of 'intro', 'normal', or 'demo'
+// Game mode is one of 'intro', 'normal', or 'demo'
 let currentGameMode = 'intro';
 let healthDecreasePaused = false;  // Allows pausing health decrease
 
 // View toggle variables (only active in non-intro modes)
-let firstPersonView = false;  // defaults to third‑person view
+let firstPersonView = false;  // defaults to third-person view
 let vKeyPressed = false;
 let pKeyPressed = false;
 
@@ -41,7 +41,7 @@ let cameraDistance = 15;
 window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase();
     keyStates[key] = true;
-    // Only allow toggling views outside the intro sequence.
+    // Only allow toggling views outside the intro state.
     if (key === 'v' && !vKeyPressed && currentGameMode !== 'intro') {
         firstPersonView = !firstPersonView;
         vKeyPressed = true;
@@ -269,6 +269,7 @@ loadLetter('a',  4, 0, 0);
 loadLetter('r',  8, 0, 0);
 
 // ----- Dynamic Spawning of Falling Letters -----
+// We set userData.hasHitGround = false for each newly spawned letter.
 function loadFallingLetter(letter, posX, posY, posZ) {
     const mtlLoader = new MTLLoader();
     mtlLoader.setPath('assets/');
@@ -283,6 +284,7 @@ function loadFallingLetter(letter, posX, posY, posZ) {
                 object.position.set(posX, posY, posZ);
                 object.userData.previousPosition = object.position.clone();
                 object.userData.squishing = false;
+                object.userData.hasHitGround = false; // so we only spawn particles once
                 scene.add(object);
                 fallingLetters.push(object);
             },
@@ -333,23 +335,38 @@ function startGame(mode = 'normal') {
 }
 
 function resetGame() {
+    // Exit pointer lock if it's active
+    document.exitPointerLock();
+
     removeGameOverScreen();
     gameStarted = false;
     gameOver = false;
-    health = currentGameMode === 'demo' ? 400 : 50;
+    currentGameMode = 'intro';
+
+    // Reset health & stats for the "intro" state
+    health = 100;
     score = 0;
     startTime = 0;
     letterSpawnTimer = 0;
     currentSpawnInterval = 2;
+
+    // Remove any falling letters
     fallingLetters.forEach(letter => scene.remove(letter));
     fallingLetters.length = 0;
+
+    // Remove active particle systems
+    activeParticles.forEach(ps => scene.remove(ps));
+    activeParticles.length = 0;
+
+    // Reset lamp to its original position/rotation
     if (lamp) {
-        lamp.position.set(0, 0, -10);
+        lamp.position.set(-3, 0, 5);
+        lamp.rotation.set(0, -Math.PI / 2, 0);
         lamp.userData.previousY = lamp.position.y;
-        lamp.rotation.y = Math.PI;
+        lampIsJumping = false;
     }
-    // Reset back to intro mode.
-    currentGameMode = 'intro';
+
+    // Show start menu again
     if (startMenu) {
         startMenu.style.display = 'block';
     }
@@ -382,7 +399,7 @@ function spawnParticlesAt(position) {
 
         // Slight drift velocities (to look like smoke rising / moving sideways)
         const vx = (Math.random() - 0.5) * 0.3;
-        const vy = 0.2 + Math.random() * 0.4;  // mostly upwards
+        const vy = 0.2 + Math.random() * 0.4; // mostly upwards
         const vz = (Math.random() - 0.5) * 0.3;
         velocities[i * 3]     = vx;
         velocities[i * 3 + 1] = vy;
@@ -480,7 +497,6 @@ function animate() {
 
     // ----- Lamp Movement, Jumping, and Rotation -----
     if (lamp) {
-        // Only allow movement if game started & not intro
         if (currentGameMode !== 'intro' && gameStarted) {
             const speed = 0.15;
             // Get forward and right vectors from the camera (flattened on Y).
@@ -601,15 +617,21 @@ function animate() {
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
         const gravityAcc = new THREE.Vector3(0, -9.8, 0);
-        verletIntegration(letter, gravityAcc, dt);
+        // Only update if not grounded; otherwise, it won't sink below 0 again
+        if (!letter.userData.hasHitGround) {
+            verletIntegration(letter, gravityAcc, dt);
+        }
 
-        // Check if letter has hit the ground
-        if (letter.position.y < 0) {
+        // Check if letter has just hit the ground
+        if (letter.position.y < 0 && !letter.userData.hasHitGround) {
             letter.position.y = 0;
             if (letter.userData.previousPosition) {
                 letter.userData.previousPosition.y = 0;
             }
-            // ---- Spawn Particles when a letter hits the ground ----
+            // Mark as grounded so we do not repeatedly spawn particles
+            letter.userData.hasHitGround = true;
+
+            // ---- Spawn Particles once when a letter hits the ground ----
             spawnParticlesAt(letter.position.clone());
         }
     }
