@@ -162,9 +162,7 @@ scene.add(ambientLight);
 // Create a spotlight for the lamp that is pure white and 3x brighter than before.
 // Its cone angle is 45°.
 const lampLight = new THREE.SpotLight(0xffffff, 6, 100, Math.PI / 4, 0.1, 1);
-// Set the spotlight's local position to be 5 units forward (positive z direction) relative to the lamp.
 lampLight.position.set(0, 0, 5);
-// Set the target so that the beam shoots forward with a slight downward tilt.
 lampLight.target.position.set(0, -1, 10);
 scene.add(lampLight);
 scene.add(lampLight.target);
@@ -406,7 +404,7 @@ function animate() {
             displayGameOver();
         }
         // Update UI to include timer (in seconds)
-        healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score} | Time: ${elapsedTime.toFixed(0)} s`;
+        healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score} | Time: ${elapsedTime.toFixed(2)} s`;
         ambientLight.intensity = (health / 100) * 0.5;
         letterSpawnTimer += dt;
         if (letterSpawnTimer >= currentSpawnInterval) {
@@ -417,29 +415,39 @@ function animate() {
     }
 
     if (lamp) {
-        const speed = 0.15;
-        const forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        forward.y = 0;
-        forward.normalize();
-        const right = new THREE.Vector3();
-        right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
-        right.normalize();
-        let move = new THREE.Vector3();
-        if (keyStates['w']) move.add(forward);
-        if (keyStates['s']) move.sub(forward);
-        if (keyStates['a']) move.sub(right);
-        if (keyStates['d']) move.add(right);
-        if (move.length() > 0) {
-            move.normalize();
-            lamp.position.add(move.multiplyScalar(speed));
-            lamp.rotation.y = Math.atan2(move.x, move.z);
-        }
-        if (keyStates[' '] && !lampIsJumping) {
+        // Auto jumping mechanism when game is not started
+        if (!gameStarted && !lampIsJumping) {
             lampJumpVelocity = jumpStrength;
             lampIsJumping = true;
             lampInitialY = lamp.position.y;
         }
+
+        if (gameStarted) {
+            const speed = 0.15;
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+            const right = new THREE.Vector3();
+            right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+            right.normalize();
+            let move = new THREE.Vector3();
+            if (keyStates['w']) move.add(forward);
+            if (keyStates['s']) move.sub(forward);
+            if (keyStates['a']) move.sub(right);
+            if (keyStates['d']) move.add(right);
+            if (move.length() > 0) {
+                move.normalize();
+                lamp.position.add(move.multiplyScalar(speed));
+                lamp.rotation.y = Math.atan2(move.x, move.z);
+            }
+            if (keyStates[' '] && !lampIsJumping) {
+                lampJumpVelocity = jumpStrength;
+                lampIsJumping = true;
+                lampInitialY = lamp.position.y;
+            }
+        }
+
         if (lampIsJumping) {
             lampJumpVelocity += gravity * dt;
             lamp.position.y += lampJumpVelocity * dt;
@@ -449,6 +457,7 @@ function animate() {
                 lampJumpVelocity = 0;
             }
         }
+
         if (firstPersonView) {
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
