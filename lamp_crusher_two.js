@@ -10,6 +10,7 @@ let score = 0;
 let startTime = 0;
 let letterSpawnTimer = 0;          // accumulates time for spawning falling letters
 let currentSpawnInterval = 2;      // initial spawn interval (in seconds)
+let currentGameMode = 'normal';    // 'normal' or 'demo'
 
 // Create UI elements: Start Menu and Health/Score overlay.
 const startMenu = document.createElement('div');
@@ -38,10 +39,23 @@ startButton.style.color = 'white';
 startButton.style.border = 'none';
 startButton.style.borderRadius = '5px';
 startButton.style.cursor = 'pointer';
-startButton.addEventListener('click', startGame);
+startButton.addEventListener('click', () => startGame('normal'));
+
+const demoButton = document.createElement('button');
+demoButton.textContent = 'Demo Mode';
+demoButton.style.padding = '10px 20px';
+demoButton.style.fontSize = '18px';
+demoButton.style.backgroundColor = '#4CAF50';
+demoButton.style.color = 'white';
+demoButton.style.border = 'none';
+demoButton.style.borderRadius = '5px';
+demoButton.style.cursor = 'pointer';
+demoButton.style.marginLeft = '10px';
+demoButton.addEventListener('click', () => startGame('demo'));
 
 startMenu.appendChild(titleElement);
 startMenu.appendChild(startButton);
+startMenu.appendChild(demoButton);
 document.body.appendChild(startMenu);
 
 const healthAndScoreElement = document.createElement('div');
@@ -54,7 +68,7 @@ healthAndScoreElement.style.color = 'white';
 healthAndScoreElement.style.fontSize = '20px';
 healthAndScoreElement.style.fontFamily = 'Arial, sans-serif';
 healthAndScoreElement.style.zIndex = '9999';
-healthAndScoreElement.textContent = `Health: ${health} | Score: ${score}`;
+healthAndScoreElement.textContent = `Health: ${health} | Score: ${score} | Time: 0 s`;
 document.body.appendChild(healthAndScoreElement);
 
 // ---------- End of Game State & UI Variables --------------
@@ -133,7 +147,6 @@ renderer.domElement.addEventListener('click', () => {
 });
 
 // ----- Ground -----
-// Ground material color set to blue #6689FF.
 const groundGeometry = new THREE.PlaneGeometry(200, 200);
 const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x6689FF });
 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
@@ -149,11 +162,10 @@ scene.add(ambientLight);
 // Create a spotlight for the lamp that is pure white and 3x brighter than before.
 // Its cone angle is 45°.
 const lampLight = new THREE.SpotLight(0xffffff, 6, 100, Math.PI / 4, 0.1, 1);
-// Set the spotlight to be emitted from the center of the lamp.
-lampLight.position.set(0, 0, 0);
-// Set the target so that the beam shoots forward (assumed -Z) and 45° downward.
-// Here, the target is set to (0, -1, -1) relative to the lamp.
-lampLight.target.position.set(0, -1, -1);
+// Set the spotlight's local position to be 5 units forward (positive z direction) relative to the lamp.
+lampLight.position.set(0, 0, 5);
+// Set the target so that the beam shoots forward with a slight downward tilt.
+lampLight.target.position.set(0, -1, 10);
 scene.add(lampLight);
 scene.add(lampLight.target);
 
@@ -204,7 +216,7 @@ window.addEventListener('wheel', (event) => {
 let lampJumpVelocity = 0;
 let lampIsJumping = false;
 const gravity = -9.8;
-const jumpStrength = 5;
+const jumpStrength = 6; // Make the lamp jump higher.
 let lampInitialY = 0;
 
 const clock = new THREE.Clock();
@@ -223,8 +235,11 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
             object.scale.set(3, 3, 3);
             scene.add(object);
             lamp = object;
-            // Attach the spotlight to the lamp so it emits from its center.
+            // Attach the spotlight to the lamp so it always emits from its front.
+            lampLight.position.set(0, 0.65, 0);
             lamp.add(lampLight);
+            // Adjust the target relative to the lamp.
+            lampLight.target.position.set(0, -1, 10);
             lamp.add(lampLight.target);
         },
         (xhr) => {
@@ -347,10 +362,11 @@ function displayGameOver() {
 }
 
 // ---------- Start and Reset Game Functions --------------
-function startGame() {
+function startGame(mode = 'normal') {
+    currentGameMode = mode;
     gameStarted = true;
     gameOver = false;
-    health = 100;
+    health = mode === 'demo' ? 200 : 50;
     score = 0;
     startTime = performance.now();
     letterSpawnTimer = 0;
@@ -363,7 +379,7 @@ function resetGame() {
     if (gameOverDiv) gameOverDiv.remove();
     gameStarted = false;
     gameOver = false;
-    health = 100;
+    health = currentGameMode === 'demo' ? 200 : 50;
     score = 0;
     startTime = 0;
     letterSpawnTimer = 0;
@@ -389,7 +405,8 @@ function animate() {
             gameOver = true;
             displayGameOver();
         }
-        healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score}`;
+        // Update UI to include timer (in seconds)
+        healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score} | Time: ${elapsedTime.toFixed(0)} s`;
         ambientLight.intensity = (health / 100) * 0.5;
         letterSpawnTimer += dt;
         if (letterSpawnTimer >= currentSpawnInterval) {
@@ -432,7 +449,6 @@ function animate() {
                 lampJumpVelocity = 0;
             }
         }
-        lampLight.position.set(lamp.position.x, lamp.position.y, lamp.position.z);
         if (firstPersonView) {
             const eyeOffset = new THREE.Vector3(0, 1, 0);
             camera.position.copy(lamp.position).add(eyeOffset);
