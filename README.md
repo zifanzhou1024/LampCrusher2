@@ -23,6 +23,7 @@ LampCrusher2/
 │   └── pixar_r.mtl
 ├── index.html
 ├── lamp_crusher_two.js
+├── ui.js
 ├── package.json
 └── node_modules/
 ```
@@ -141,6 +142,8 @@ Then, open the provided URL (e.g., `http://localhost:3000`) in your browser.
 
 - **Asset Loading:**  
   The project loads a lamp model and several letter models from the `assets/` folder using the OBJLoader and MTLLoader from three.js addons.
+- **Demo Mode:**  
+  Use `P` to pause the decrease of health for better testing purposes.  
 
 ---
 
