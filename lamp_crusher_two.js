@@ -43,6 +43,11 @@ const keyStates = {};
 let firstPersonView = false;  // default to third-person view
 let vKeyPressed = false;      // flag to prevent continuous toggling
 
+// Arrays to keep track of letters for collision/squish animation
+const staticLetters = [];
+const fallingLetters = [];
+
+
 // Mouse-controlled camera rotation angles (in radians)
 let cameraRotationX = 0;
 let cameraRotationY = 0;
@@ -86,6 +91,7 @@ let lampInitialY = 0;    // record starting Y position
 const clock = new THREE.Clock();
 
 // ----- Load the Lamp Model (OBJ + MTL) -----
+// NOTE: Lamp is now scaled 3× instead of 2×.
 const mtlLoaderLamp = new MTLLoader();
 mtlLoaderLamp.setPath('assets/');
 mtlLoaderLamp.load('lamp.mtl', (materials) => {
@@ -97,8 +103,8 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
         (object) => {
             // Position such that the base is on the ground
             object.position.set(0, 0, 0);
-            // Scale the lamp 2x larger
-            object.scale.set(2, 2, 2);
+            // Scale the lamp 3x larger now
+            object.scale.set(3, 3, 3);
             scene.add(object);
             lamp = object;
         },
@@ -127,6 +133,8 @@ function loadLetter(letter, posX, posY, posZ) {
                 // Place the letter so its base is on the ground
                 object.position.set(posX, posY, posZ);
                 scene.add(object);
+                // Save for collision detection and squish animation
+                staticLetters.push(object);
             },
             (xhr) => {
                 console.log(`Letter ${letter}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
@@ -146,7 +154,6 @@ loadLetter('a',  2, 0, 0);
 loadLetter('r',  4, 0, 0);
 
 // ----- Dynamic Spawning of Falling Letters -----
-const fallingLetters = [];
 const letterGravity = -4.9; // gravity constant for falling letters
 
 function loadFallingLetter(letter, posX, posY, posZ) {
@@ -165,6 +172,8 @@ function loadFallingLetter(letter, posX, posY, posZ) {
                 object.position.set(posX, posY, posZ);
                 // Initialize its downward velocity (stored in userData)
                 object.userData.velocityY = 0;
+                // For squish animation: flag and timer
+                object.userData.squishing = false;
                 scene.add(object);
                 fallingLetters.push(object);
             },
@@ -190,6 +199,10 @@ function spawnFallingLetter() {
 
 // Spawn a new falling letter every 2 seconds
 setInterval(spawnFallingLetter, 2000);
+
+// ----- Collision & Squish Animation Parameters -----
+const collisionThreshold = 1;      // horizontal distance threshold for collision
+const squishDuration = 1;          // duration (in seconds) for squish animation
 
 // ----- Animation Loop -----
 function animate() {
@@ -267,20 +280,55 @@ function animate() {
         }
     }
 
-    // ----- Update Falling Letters -----
+    // ----- Update Falling Letters Movement -----
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
         // Update its vertical velocity with gravity
         letter.userData.velocityY += letterGravity * dt;
         // Move the letter downwards based on its velocity
         letter.position.y += letter.userData.velocityY * dt;
-        // If the letter reaches (or falls below) the ground level, remove it
+        // If the falling letter reaches the ground, clamp its y position (it will still be interactable)
         if (letter.position.y <= 0) {
-            letter.position.y = 0
-            //scene.remove(letter);
-            //fallingLetters.splice(i, 1);
+            letter.position.y = 0;
         }
     }
+
+    // ----- Collision Detection & Squish Animation for All Letters -----
+    // Process both static and falling letters for collision with the lamp.
+    [staticLetters, fallingLetters].forEach(letterArray => {
+        for (let i = letterArray.length - 1; i >= 0; i--) {
+            const letter = letterArray[i];
+            // If the letter hasn't started squishing and the lamp is falling (jumping downward)
+            if (!letter.userData.squishing && lampJumpVelocity < 0) {
+                // Check horizontal distance (in XZ plane)
+                const dx = lamp.position.x - letter.position.x;
+                const dz = lamp.position.z - letter.position.z;
+                const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+                // Also check that the lamp is coming from above the letter
+                if (horizontalDistance < collisionThreshold && lamp.position.y > letter.position.y + 1) {
+                    // Trigger squish animation on the letter
+                    letter.userData.squishing = true;
+                    letter.userData.squishElapsed = 0;
+                    letter.userData.squishDuration = squishDuration;
+                    letter.userData.originalScale = letter.scale.clone();
+                }
+            }
+            // If the letter is in the process of squishing, update its animation
+            if (letter.userData.squishing) {
+                letter.userData.squishElapsed += dt;
+                let progress = letter.userData.squishElapsed / letter.userData.squishDuration;
+                if (progress > 1) progress = 1;
+                // Gradually reduce the vertical scale (down to 10% of its original height)
+                letter.scale.y = letter.userData.originalScale.y * (1 - 0.9 * progress);
+                // Optionally, you could also adjust material opacity here if desired.
+                // Once squish animation is complete, remove the letter.
+                if (progress >= 1) {
+                    scene.remove(letter);
+                    letterArray.splice(i, 1);
+                }
+            }
+        }
+    });
 
     renderer.render(scene, camera);
 }
