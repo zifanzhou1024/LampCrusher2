@@ -14,6 +14,7 @@ let startTime = 0;
 let letterSpawnTimer = 0;          // accumulates time for spawning falling letters
 let currentSpawnInterval = 2;      // initial spawn interval (in seconds)
 let currentGameMode = 'normal';    // 'normal' or 'demo'
+let healthDecreasePaused = false;  // New variable to pause health decrease
 
 // Initialize UI elements.
 const { startMenu } = initializeUI();
@@ -23,6 +24,7 @@ let lamp = null; // the lamp object once loaded.
 const keyStates = {};
 let firstPersonView = false;  // default to third-person view.
 let vKeyPressed = false;      // prevent continuous toggling.
+let pKeyPressed = false;      // prevent continuous toggling for pause
 
 const staticLetters = [];
 const fallingLetters = [];
@@ -40,12 +42,20 @@ window.addEventListener('keydown', (event) => {
         vKeyPressed = true;
         console.log("View mode toggled. First-person:", firstPersonView);
     }
+    if (key === 'p' && !pKeyPressed) {
+        healthDecreasePaused = !healthDecreasePaused;
+        pKeyPressed = true;
+        console.log("Health decrease paused:", healthDecreasePaused);
+    }
 });
 window.addEventListener('keyup', (event) => {
     const key = event.key.toLowerCase();
     keyStates[key] = false;
     if (key === 'v') {
         vKeyPressed = false;
+    }
+    if (key === 'p') {
+        pKeyPressed = false;
     }
 });
 window.addEventListener('mousemove', (event) => {
@@ -301,7 +311,7 @@ function startGame(mode = 'normal') {
     currentGameMode = mode;
     gameStarted = true;
     gameOver = false;
-    health = mode === 'demo' ? 200 : 50;
+    health = mode === 'demo' ? 400 : 50;
     score = 0;
     startTime = performance.now();
     letterSpawnTimer = 0;
@@ -315,7 +325,7 @@ function resetGame() {
     removeGameOverScreen();
     gameStarted = false;
     gameOver = false;
-    health = currentGameMode === 'demo' ? 200 : 50;
+    health = currentGameMode === 'demo' ? 400 : 50;
     score = 0;
     startTime = 0;
     letterSpawnTimer = 0;
@@ -341,7 +351,14 @@ function animate() {
     if (gameStarted && !gameOver) {
         let elapsedTime = (performance.now() - startTime) / 1000;
         let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
-        health -= 10 * healthDecreaseRate * dt;
+        if (!healthDecreasePaused) {
+            // In demo mode, health decreases at half the rate.
+            let decreaseAmount = 10 * healthDecreaseRate * dt;
+            if (currentGameMode === 'demo') {
+                decreaseAmount *= 0.5;
+            }
+            health -= decreaseAmount;
+        }
         if (health <= 0) {
             health = 0;
             displayGameOver();
@@ -405,6 +422,10 @@ function animate() {
             }
         }
 
+        // --- Update Lamp Rotation Based on Mouse Movement ---
+        // Offset by Math.PI to make the lamp face forward.
+        lamp.rotation.y = cameraRotationY + Math.PI;
+
         // --- Camera Setup ---
         if (firstPersonView) {
             const eyeOffset = new THREE.Vector3(0, 1, 0);
@@ -457,7 +478,7 @@ function animate() {
         }
     }
 
-    // ----- Update Falling Letters with Full Verlet Integration -----
+    // --- Update Falling Letters with Full Verlet Integration ---
     for (let i = fallingLetters.length - 1; i >= 0; i--) {
         const letter = fallingLetters[i];
         const gravityAcc = new THREE.Vector3(0, -9.8, 0);
@@ -470,7 +491,7 @@ function animate() {
         }
     }
 
-    // ----- Process Squishing Animations -----
+    // --- Process Squishing Animations ---
     const processSquish = (letterArray) => {
         for (let i = letterArray.length - 1; i >= 0; i--) {
             const letter = letterArray[i];
