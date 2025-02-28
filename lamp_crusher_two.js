@@ -539,12 +539,13 @@ function animate() {
             if (move.lengthSq() > 0) {
                 move.normalize();
                 lamp.position.addScaledVector(move, speed);
-                // Rotate lamp to face movement direction.
-                lamp.lookAt(
-                    lamp.position.x + move.x,
-                    lamp.position.y,
-                    lamp.position.z + move.z
-                );
+                // Smoothly interpolate the lamp's Y-rotation toward the movement direction.
+                const targetAngle = Math.atan2(move.x, move.z);
+                const rotationSpeed = 0.6; // Adjust this value for smoother turning.
+                let angleDiff = targetAngle - lamp.rotation.y;
+                // Normalize the angle difference to [-π, π]
+                angleDiff = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                lamp.rotation.y += angleDiff * rotationSpeed;
             }
 
             // Jump when space is pressed.
