@@ -275,7 +275,7 @@ window.lampParts = lampParts;
 let lampSkeleton = null;
 lamp = new THREE.Group();
 
-fbxLoader.load('assets/lamp_skeleton.fbx', (skeleton) => {
+fbxLoader.load('/assets/lamp_skeleton.fbx', (skeleton) => {
     lampSkeleton = skeleton;
 
     lampSkeleton.position.set(0, 0, 0);
@@ -296,7 +296,7 @@ fbxLoader.load('assets/lamp_skeleton.fbx', (skeleton) => {
 });
 
 function loadLampPart(name, file, parentJoint) {
-    fbxLoader.load(`assets/${file}`, (object) => {
+    fbxLoader.load(`/assets/${file}`, (object) => {
         console.log(`Loaded part: ${name}, trying to attach to ${parentJoint}`);
 
         object.position.set(0, 0, 0);
@@ -386,12 +386,12 @@ function assembleLamp() {
 // ----- Functions to Load Static Letters -----
 function loadLetter(letter, posX, posY, posZ) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.setPath('assets/');
+    mtlLoader.setPath('/assets/');
     mtlLoader.load(`pixar_${letter}.mtl`, (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.setPath('assets/');
+        objLoader.setPath('/assets/');
         objLoader.load(`pixar_${letter}.obj`,
             (object) => {
                 object.rotation.y = -Math.PI / 2;
@@ -425,12 +425,12 @@ loadAllStaticLetters();
 // ----- Dynamic Spawning of Falling Letters -----
 function loadFallingLetter(letter, posX, posY, posZ) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.setPath('assets/');
+    mtlLoader.setPath('/assets/');
     mtlLoader.load(`pixar_${letter}.mtl`, (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.setPath('assets/');
+        objLoader.setPath('/assets/');
         objLoader.load(`pixar_${letter}.obj`,
             (object) => {
                 object.rotation.y = -Math.PI / 2;
