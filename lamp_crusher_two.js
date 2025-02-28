@@ -153,9 +153,9 @@ function getOBB(object, collisionScale = 1) {
     let halfSizes = size.multiplyScalar(0.5).multiplyScalar(collisionScale);
     let m = object.matrixWorld;
     let axes = [
-        new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
+        new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).normalize(),
         new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).normalize(),
-        new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).normalize()
+        new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize()
     ];
     return { center, axes, halfSizes };
 }
