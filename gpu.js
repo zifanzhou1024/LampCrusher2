@@ -1,4 +1,6 @@
 export const gl = document.getElementById( "gl_canvas" ).getContext( "webgl" );
+gl.canvas.width = window.innerWidth;
+gl.canvas.height = window.innerHeight;
 
 export class GpuDevice
 {
@@ -7,35 +9,38 @@ export class GpuDevice
   }
 }
 
+const kVertexStride = (3 + 3 + 2) * Float32Array.BYTES_PER_ELEMENT;
+
 export class GpuMesh
 {
   constructor(vertices, indices)
   {
-    this.vertices      = vertices;
-    this.indices       = indices;
+    this.vertices      = new Float32Array(vertices);
+    this.indices       = new Uint16Array(indices);
     this.vertex_buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertex_buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.STATIC_DRAW);
 
-    const stride = (3 + 3 + 2) * Float32Array.BYTES_PER_ELEMENT;
-
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
-
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, stride, 3 * Float32Array.BYTES_PER_ELEMENT);
-
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, stride, (3 + 3) * Float32Array.BYTES_PER_ELEMENT);
 
     this.index_buffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.index_buffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STATIC_DRAW);
   }
 
   draw()
   {
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vertex_buffer);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.index_buffer);
+
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, kVertexStride, 0);
+
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, kVertexStride, 3 * Float32Array.BYTES_PER_ELEMENT);
+
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, kVertexStride, (3 + 3) * Float32Array.BYTES_PER_ELEMENT);
+
     gl.drawElements(gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0);
   }
 }
@@ -76,6 +81,8 @@ export class GpuFragmentShader
   }
 }
 
+export let g_CurrentPSO = null;
+
 export class GpuGraphicsPSO
 {
   constructor(vertex_shader, fragment_shader, uniforms)
@@ -86,6 +93,10 @@ export class GpuGraphicsPSO
     this.uniforms        = uniforms;
     gl.attachShader(this.pso, this.vertex_shader.shader);
     gl.attachShader(this.pso, this.fragment_shader.shader);
+
+    gl.bindAttribLocation(this.pso, 0, "position");
+    gl.bindAttribLocation(this.pso, 1, "normal");
+    gl.bindAttribLocation(this.pso, 2, "uv");
     gl.linkProgram(this.pso);
 
     if (!gl.getProgramParameter(this.pso, gl.LINK_STATUS))
@@ -96,28 +107,30 @@ export class GpuGraphicsPSO
 
   bind(uniforms)
   {
+    g_CurrentPSO = this;
+
     gl.useProgram(this.pso);
     this.texture_slots = 0;
     for (const name in this.uniforms)
     {
-      if (obj[name])
+      if (this.uniforms[name])
       {
-        this.set_uniform(name, obj[name]);
+        this.set_uniform(name, this.uniforms[name]);
       }
     }
 
     for (const name in uniforms)
     {
-      if (obj[name])
+      if (uniforms[name])
       {
-        this.set_uniform(name, obj[name]);
+        this.set_uniform(name, uniforms[name]);
       }
     }
   }
 
   set_uniform(name, value)
   {
-    const location = this.gl.getUniformLocation(this.pso, name);
+    const location = gl.getUniformLocation(this.pso, name);
 
     if (!location)
     {
@@ -154,9 +167,9 @@ export class GpuGraphicsPSO
     }
     else if (value instanceof WebGLTexture)
     {
-      this.gl.activeTexture(this.gl.TEXTURE0 + this.texture_slots);
-      this.gl.bindTexture(this.gl.TEXTURE_2D, value);
-      this.gl.uniform1i(location, this.texture_slots);
+      gl.activeTexture(gl.TEXTURE0 + this.texture_slots);
+      gl.bindTexture(gl.TEXTURE_2D, value);
+      gl.uniform1i(location, this.texture_slots);
       this.texture_slots++;
     }
     else

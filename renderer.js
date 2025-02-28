@@ -1,8 +1,10 @@
-import { gl, GpuDevice, GpuMesh, GpuVertexShader, GpuFragmentShader, GpuGraphicsPSO } from "./gpu.js"
+import { gl, g_CurrentPSO, GpuDevice, GpuMesh, GpuVertexShader, GpuFragmentShader, GpuGraphicsPSO } from "./gpu.js"
 import { kShaders } from "./shaders.js"
 
 import * as THREE from 'three';
 import { Vector2, Vector3, Vector4, Matrix4 } from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
 export const RenderBuffers = Object.freeze({
   kGBufferDiffuseMetallic: 0,
@@ -36,11 +38,83 @@ const perspective_infinite_reverse_rh = (fov_y_rad, aspect_ratio, z_near) =>
   );
 };
 
+const perspective_matrix_rh = ( fov, aspect, near, far ) =>
+{
+  const f        = 1.0 / Math.tan( fov / 2 );
+
+  return new Matrix4().set(
+    f / aspect, 0, 0,                               0,
+    0,          f, 0,                               0,
+    0,          0, ( near + far ) / ( near - far ), -1,
+    0,          0, ( 2 * near * far ) / ( near - far ), 0
+  );
+}
+
+export class Actor
+{
+  constructor( mesh, material )
+  {
+    this.transform      = new Matrix4();
+    this.prev_transform = new Matrix4();
+    this.mesh           = mesh;
+    this.material       = material;
+    this.bounding_box   = null;
+  }
+}
+
+export class ModelSubset
+{
+  constructor( name, vertices, indices, transform )
+  {
+    this.name      = name;
+    this.gpu_mesh  = new GpuMesh( vertices, indices );
+    this.transform = transform
+  }
+
+  draw( model_uniform, parent_transform, prev_model_uniform, prev_parent_transform )
+  {
+    if ( model_uniform )
+    {
+      const model = parent_transform.clone().multiply( this.transform );
+      g_CurrentPSO.set_uniform( model_uniform, model.elements );
+    }
+
+    if ( prev_model_uniform )
+    {
+      const prev_model = prev_parent_transform.clone().multiply( this.transform );
+      g_CurrentPSO.set_uniform( prev_model_uniform, prev_model.elements );
+    }
+    this.gpu_mesh.draw();
+  }
+}
+
+export class Model
+{
+  constructor( name, model_subsets )
+  {
+    this.name    = name;
+    this.subsets = model_subsets;
+  }
+
+  draw( model_uniform, model, prev_model_uniform, prev_model )
+  {
+    for (let i = 0; i < this.subsets.length; i++)
+    {
+      const subset = this.subsets[i];
+      subset.draw( model_uniform, model, prev_model_uniform, prev_model );
+    }
+  }
+}
+
 export class Camera
 {
-  constructor()
+  constructor( fov_y_rad )
   {
-    this.transform = Matrix4.identity();
+    const aspect_ratio = gl.canvas.width / gl.canvas.height;
+
+    this.transform     = new Matrix4();
+
+    this.projection    = perspective_infinite_reverse_rh( fov_y_rad, aspect_ratio, 0.1 );
   }
 }
 
@@ -78,25 +152,145 @@ export class SpotLight
   }
 }
 
-export class Ground
-{
-  constructor()
-  {
-    this.mesh = new GpuMesh(
-      [
-        -100, 0, -100,    0, 1, 0,   0, 0,
-         100, 0, -100,    0, 1, 0,   1, 0,
-        -100, 0,  100,    0, 1, 0,   0, 1,
-         100, 0,  100,    0, 1, 0,   1, 1,
-      ],
-      [0, 1, 2, 1, 3, 2]
-    );
-  }
+export const kGroundMesh = new GpuMesh(
+  [
+    -100, 0, -100,     0, 1, 0,   0, 0,
+     100, 0, -100,     0, 1, 0,   1, 0,
+     100, 0,  100,     0, 1, 0,   1, 1,
+    -100, 0,  100,     0, 1, 0,   0, 1,
+  ],
+  [0, 1, 2, 0, 2, 3]
+);
 
-  draw()
+export const kCubeMesh = new GpuMesh(
+  [
+    -1, -1, -1,        0, 0, -1,         0, 0, // Back face
+     1, -1, -1,        0, 0, -1,         1, 0,
+     1,  1, -1,        0, 0, -1,         1, 1,
+    -1,  1, -1,        0, 0, -1,         0, 1,
+
+    -1, -1,  1,        0, 0,  1,         0, 0, // Front face
+     1, -1,  1,        0, 0,  1,         1, 0,
+     1,  1,  1,        0, 0,  1,         1, 1,
+    -1,  1,  1,        0, 0,  1,         0, 1,
+
+    -1, -1, -1,       -1, 0, 0,         0, 0, // Left face
+    -1, -1,  1,       -1, 0, 0,         1, 0,
+    -1,  1,  1,       -1, 0, 0,         1, 1,
+    -1,  1, -1,       -1, 0, 0,         0, 1,
+
+     1, -1, -1,        1, 0, 0,         0, 0, // Right face
+     1, -1,  1,        1, 0, 0,         1, 0,
+     1,  1,  1,        1, 0, 0,         1, 1,
+     1,  1, -1,        1, 0, 0,         0, 1,
+
+    -1, -1, -1,        0, -1, 0,         0, 0, // Bottom face
+     1, -1, -1,        0, -1, 0,         1, 0,
+     1, -1,  1,        0, -1, 0,         1, 1,
+    -1, -1,  1,        0, -1, 0,         0, 1,
+
+    -1,  1, -1,        0, 1, 0,         0, 0, // Top face
+     1,  1, -1,        0, 1, 0,         1, 0,
+     1,  1,  1,        0, 1, 0,         1, 1,
+    -1,  1,  1,        0, 1, 0,         0, 1,
+  ],
+  [
+    // Indices for each face
+    0, 1, 2, 0, 2, 3,  // Front
+    4, 6, 5, 4, 7, 6,  // Back
+    8, 9, 10, 8, 10, 11, // Left
+    12, 14, 13, 12, 15, 14, // Right
+    16, 17, 18, 16, 18, 19, // Bottom
+    20, 22, 21, 20, 23, 22, // Top
+  ]
+);
+
+export function load_gltf_model( asset )
+{
+  const loader = new GLTFLoader();
+  loader.setPath( 'assets/' );
+  return new Promise( ( resolve, reject ) =>
   {
-    this.mesh.draw();
-  }
+    loader.load( asset, ( gltf ) =>
+    {
+      const flatten_scene = ( node, result = [] ) =>
+      {
+        result.push( node );
+        if ( node.children )
+        {
+          node.children.forEach( child => flatten_scene( child, result ) );
+        }
+        return result;
+      };
+
+      const meshes  = flatten_scene( gltf.scene );
+      const subsets = meshes.map( 
+        ( obj ) =>
+        {
+          if ( !obj.isMesh )
+          {
+            return null;
+          }
+
+          const geometry = obj.geometry;
+
+          if ( !geometry || !geometry.attributes || !geometry.index )
+          {
+            return null;
+          }
+
+          if ( !geometry.attributes.position || !geometry.attributes.normal )
+          {
+            return null;
+          }
+
+
+          const positions    = geometry.attributes.position.array;
+          const normals      = geometry.attributes.normal.array;
+          const uvs          = geometry.attributes.uv ? geometry.attributes.uv.array : new Float32Array( positions.length / 3 * 2 );
+          const indices      = geometry.index.array;
+
+          if ( !positions || !normals || !uvs || !indices )
+          {
+            return null;
+          }
+
+          const vertex_count = positions.length / 3;
+          const vertices     = new Float32Array( vertex_count * ( 3 + 3 + 2 ) );
+
+          for ( let isrc = 0, idst = 0; isrc < vertex_count; isrc++ )
+          {
+              vertices[ idst++ ] = positions[ isrc * 3 + 0 ];
+              vertices[ idst++ ] = positions[ isrc * 3 + 1 ];
+              vertices[ idst++ ] = positions[ isrc * 3 + 2 ];
+
+              vertices[ idst++ ] = normals[ isrc * 3 + 0 ];
+              vertices[ idst++ ] = normals[ isrc * 3 + 1 ];
+              vertices[ idst++ ] = normals[ isrc * 3 + 2 ];
+
+              vertices[ idst++ ] = uvs[ isrc * 2 + 0 ];
+              vertices[ idst++ ] = uvs[ isrc * 2 + 1 ];
+          }
+
+          // Don't ask me why...
+          return new ModelSubset( obj.name, vertices, indices, obj.matrixWorld );
+        }
+      ).filter( subset => subset != null );
+
+      if ( subsets.length === 0 )
+      {
+        reject( new Error( "No meshes found in scene!" ) );
+        return null;
+      }
+
+      const model = new Model( `assets/${asset}`, subsets );
+
+      resolve( model );
+    }, undefined, ( error ) =>
+    {
+      reject( new Error( "Error loading GLTF: " + error ) );
+    });
+  });
 }
 
 export class Material
@@ -115,19 +309,12 @@ export class Material
     this.pso.bind(uniforms);
   }
 }
-export class Mesh
-{
-  constructor(path)
-  {
-    this.gpu_mesh = new GpuMesh();
-  }
-}
 
 function orthographic_proj( left, right, bottom, top, near, far )
 {
-  return Matrix4.makeScale(1 / (right - left), 1 / (top - bottom), 1 / (far - near))
-      .multiply(Matrix4.makeTranslation(-left - right, -top - bottom, -near - far))
-      .multiply(Matrix4.makeScale(2, 2, -2));
+  return (new Matrix4).makeScale(1 / (right - left), 1 / (top - bottom), 1 / (far - near))
+      .multiply((new Matrix4).makeTranslation(-left - right, -top - bottom, -near - far))
+      .multiply((new Matrix4).makeScale(2, 2, -2));
 }
 
 export class Renderer 
@@ -194,6 +381,7 @@ export class Renderer
         g_GBufferVelocity:     this.render_buffers[ RenderBuffers.kGBufferVelocity     ],
         g_GBufferVelocityPrev: this.render_buffers[ RenderBuffers.kGBufferVelocityPrev ],
         g_GBufferDepth:        this.render_buffers[ RenderBuffers.kGBufferDepth        ],
+        g_Dimensions:          [ gl.canvas.width, gl.canvas.height, 0.0 ],
       }
     );
     this.post_processing = new GpuGraphicsPSO(
@@ -205,7 +393,7 @@ export class Renderer
       new GpuVertexShader(kShaders.VS_FullscreenQuad),
       new GpuFragmentShader(kShaders.PS_Blit),
     );
-    this.blit_buffer     = RenderBuffers.kGBufferDiffuseMetallic; // RenderBuffers.kPostProcessing;
+    this.blit_buffer     = RenderBuffers.kPostProcessing;
     this.frame_id        = 0;
     this.enable_taa      = true;
     this.enable_pcf      = true;
@@ -215,33 +403,32 @@ export class Renderer
   {
     const kHaltonSequence =
     [
-      Vector2( 0.500000, 0.333333 ),
-      Vector2( 0.250000, 0.666667 ),
-      Vector2( 0.750000, 0.111111 ),
-      Vector2( 0.125000, 0.444444 ),
-      Vector2( 0.625000, 0.777778 ),
-      Vector2( 0.375000, 0.222222 ),
-      Vector2( 0.875000, 0.555556 ),
-      Vector2( 0.062500, 0.888889 ),
-      Vector2( 0.562500, 0.037037 ),
-      Vector2( 0.312500, 0.370370 ),
-      Vector2( 0.812500, 0.703704 ),
-      Vector2( 0.187500, 0.148148 ),
-      Vector2( 0.687500, 0.481481 ),
-      Vector2( 0.437500, 0.814815 ),
-      Vector2( 0.937500, 0.259259 ),
-      Vector2( 0.031250, 0.592593 ),
+      new Vector2( 0.500000, 0.333333 ),
+      new Vector2( 0.250000, 0.666667 ),
+      new Vector2( 0.750000, 0.111111 ),
+      new Vector2( 0.125000, 0.444444 ),
+      new Vector2( 0.625000, 0.777778 ),
+      new Vector2( 0.375000, 0.222222 ),
+      new Vector2( 0.875000, 0.555556 ),
+      new Vector2( 0.062500, 0.888889 ),
+      new Vector2( 0.562500, 0.037037 ),
+      new Vector2( 0.312500, 0.370370 ),
+      new Vector2( 0.812500, 0.703704 ),
+      new Vector2( 0.187500, 0.148148 ),
+      new Vector2( 0.687500, 0.481481 ),
+      new Vector2( 0.437500, 0.814815 ),
+      new Vector2( 0.937500, 0.259259 ),
+      new Vector2( 0.031250, 0.592593 ),
     ];
 
     const idx = this.frame_id % kHaltonSequence.length;
-    let   ret = kHaltonSequence[ idx ].minus( vec( 0.5, 0.5 ) ).times_pairwise( vec( 2.0 / gl.canvas.width, 2.0 / gl.canvas.height) );
-    return ret.to3();
+    let   ret = kHaltonSequence[ idx ].sub( new Vector2( 0.5, 0.5 ) ).multiply( new Vector2( 2.0 / gl.canvas.width, 2.0 / gl.canvas.height) );
+    return new Vector3(ret.x, ret.y);
   }
 
   cycle_blit_buffer()
   {
     this.blit_buffer = ( this.blit_buffer + 1 ) % RenderBuffers.kCount;
-    // this.blit        = new Material( new FullscreenShader(), { texture: this.render_buffers[ this.blit_buffer ] } );
     console.log( this.blit_buffer );
   }
 
@@ -448,70 +635,80 @@ export class Renderer
     gl.bindFramebuffer( gl.FRAMEBUFFER, null );
   }
 
-  render_handler_gbuffer()
+  render_handler_gbuffer( scene )
   {
     gl.bindFramebuffer( gl.FRAMEBUFFER, this.gbuffer );
     gl.viewport( 0, 0, gl.canvas.width, gl.canvas.height );
     gl.clearColor( 0.0, 0.0, 0.0, 0.0 );
+    gl.clearDepth( 0.0 );
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
-    gl.depthFunc( gl.LESS );
+    gl.depthFunc( gl.GREATER );
+    gl.depthMask( true );
     gl.disable( gl.BLEND );
+    gl.enable( gl.DEPTH_TEST );
 
-    for ( let iactor = 0; iactor < actors.length; iactor++ )
+    for ( let iactor = 0; iactor < scene.actors.length; iactor++ )
     {
-      const actor = actors[ iactor ];
+      const actor = scene.actors[ iactor ];
       if ( !actor.mesh || !actor.material )
         continue;
       if ( !actor.prev_transform )
       {
         actor.prev_transform = actor.transform;
       }
+
       actor.material.bind(
         {
-          g_Model:    actor.transform.elements,
+          g_ViewProj:     this.view_proj.elements,
+          g_PrevViewProj: this.prev_view_proj.elements,
+          g_TAAJitter:    this.taa_jitter.toArray(),
         }
       );
-      actor.mesh.draw( context, program_state, actor, actor.material );
+
+      actor.mesh.draw( 'g_Model', actor.transform, 'g_PrevModel', actor.prev_transform );
+
+      const error = gl.getError();
+      if ( error !== gl.NO_ERROR )
+      {
+        console.error( "WebGL error: " + error );
+      }
       actor.prev_transform = actor.transform;
     }
   }
 
 
-  render_handler_directional_shadow()
+  render_handler_directional_shadow( scene )
   {
     gl.bindFramebuffer( gl.FRAMEBUFFER, this.directional_shadow_map );
     gl.viewport( 0, 0, kShadowMapSize, kShadowMapSize );
     gl.clear( gl.DEPTH_BUFFER_BIT );
     gl.depthFunc( gl.LESS );
 
-    if ( !program_state.directional_light )
+    if ( !scene.directional_light )
       return;
 
 
-    const camera_center = program_state.camera_transform.times( vec4( 0, 0, -40, 1 ) ).to3();
-    program_state.directional_light_view = Mat4.look_at(
-      camera_center.plus( program_state.directional_light.direction.normalized().times( -40 ) ),
-      camera_center,
-      vec3( 0, 1, 0 )
-    );
-    program_state.directional_light_proj = orthographic_proj( -35, 35, -35, 35, 0.1, 75 );
+    const camera_center      = (new Vector3( 0, 0, -40 )).applyMatrix4(scene.camera.transform);
+    const center_of_interest = camera_center.add( scene.directional_light.direction.clone().multiplyScalar( -40.0 ) );
 
-    const orig_view = Mat4.identity().times(program_state.camera_inverse);
-    const orig_proj = Mat4.identity().times(program_state.projection_transform);
+    this.directional_light_proj      = orthographic_proj( -35, 35, -35, 35, 0.1, 75 );
+    this.directional_light_view      = (new Matrix4).lookAt( camera_center, center_of_interest, new Vector3( 0, 0, 1 ) );
+    this.directional_light_view_proj = (new Matrix4()).multiplyMatrices( this.directional_light_proj, this.directional_light_view );
 
-    program_state.set_camera( program_state.directional_light_view );
-    program_state.projection_transform = program_state.directional_light_proj;
-
-    for ( let iactor = 0; iactor < actors.length; iactor++ )
+    for ( let iactor = 0; iactor < scene.actors.length; iactor++ )
     {
-      const actor = actors[ iactor ];
+      const actor = scene.actors[ iactor ];
       if ( !actor.mesh || !actor.material )
         continue;
-      actor.mesh.draw( context, program_state, actor, actor.material );
-    }
 
-    program_state.set_camera( orig_view );
-    program_state.projection_transform = orig_proj;
+      actor.material.bind(
+        {
+          g_Model:    actor.transform.elements,
+          g_ViewProj: this.directional_light_view_proj.elements,
+        }
+      )
+      actor.mesh.draw();
+    }
   }
 
 /*
@@ -553,15 +750,40 @@ export class Renderer
 */
 
 
-  render_handler_lighting()
+  render_handler_lighting( scene )
   {
     gl.bindFramebuffer( gl.FRAMEBUFFER, this.pbr_buffer );
     gl.viewport( 0, 0, gl.canvas.width, gl.canvas.height );
     gl.clearColor( 0.7578125, 0.81640625, 0.953125, 1.0 );
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
-
     gl.depthFunc( gl.ALWAYS );
-    this.quad.draw( context, program_state, null, this.standard_brdf );
+
+    const camera_center = (new Vector4( 0, 0, 0, 1 )).applyMatrix4(scene.camera.transform);
+    if ( !scene.spot_light )
+    {
+      return;
+    }
+
+    this.standard_brdf.bind( 
+      {
+        g_InverseViewProj:              this.inverse_view_proj.elements,
+        g_DirectionalLightDirection:    scene.directional_light.direction.toArray(),
+        g_DirectionalLightChromaticity: scene.directional_light.chromaticity.toArray(),
+        g_DirectionalLightLuminance:    scene.directional_light.luminance,
+        g_SpotLightDirection:           scene.spot_light.direction.toArray(),
+        g_SpotLightPosition:            scene.spot_light.position.toArray(),
+        g_SpotLightChromaticity:        scene.spot_light.chromaticity.toArray(),
+        g_SpotLightLuminance:           scene.spot_light.luminance,
+        g_SpotLightInnerCutoff:         Math.cos( scene.spot_light.inner_cutoff ),
+        g_SpotLightOuterCutoff:         Math.cos( scene.spot_light.outer_cutoff ),
+
+        g_DirectionalLightViewProj:     this.directional_light_view_proj.elements,
+        g_WSCameraPosition:             [ camera_center.x, camera_center.y, camera_center.z ],
+        g_SkyColor:                     [ 0.403, 0.538, 1.768 ],
+        g_EnablePCF:                    1,
+      }
+    );
+    this.quad.draw();
   }
 
   render_handler_taa()
@@ -574,7 +796,8 @@ export class Renderer
     gl.depthFunc( gl.ALWAYS );
     if ( this.enable_taa )
     {
-      this.quad.draw( context, program_state, null, this.taa );
+      this.taa.bind({});
+      this.quad.draw();
     }
     else
     {
@@ -590,7 +813,8 @@ export class Renderer
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
     gl.depthFunc( gl.ALWAYS );
 
-    this.quad.draw( context, program_state, null, this.post_processing );
+    this.post_processing.bind({});
+    this.quad.draw();
   }
 
   render_handler_copy_temporal()
@@ -601,7 +825,8 @@ export class Renderer
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
     gl.depthFunc( gl.ALWAYS );
 
-    this.quad.draw( context, program_state, null, this.blit.override( { texture: this.render_buffers[ RenderBuffers.kTAA ] } ) );
+    this.blit.bind( { g_Sampler: this.render_buffers[ RenderBuffers.kTAA ] } );
+    this.quad.draw();
 
     gl.bindFramebuffer( gl.FRAMEBUFFER, this.velocity_prev );
     gl.viewport( 0, 0, gl.canvas.width, gl.canvas.height );
@@ -609,7 +834,8 @@ export class Renderer
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
     gl.depthFunc( gl.ALWAYS );
 
-    this.quad.draw( context, program_state, null, this.blit.override( { texture: this.render_buffers[ RenderBuffers.kGBufferVelocity ] } ) );
+    this.blit.bind( { g_Sampler: this.render_buffers[ RenderBuffers.kGBufferVelocity ] } );
+    this.quad.draw();
   }
 
   render_handler_blit()
@@ -620,13 +846,12 @@ export class Renderer
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
     gl.depthFunc( gl.ALWAYS );
 
-    this.blit.bind( { g_Sampler: this.blit_buffer } );
+    this.blit.bind( { g_Sampler: this.render_buffers[ this.blit_buffer ] } );
     this.quad.draw();
   }
 
   submit( scene )
   {
-    this.prev_camera = scene.camera.transform.clone();
 
     if ( this.enable_taa )
     {
@@ -634,22 +859,38 @@ export class Renderer
     }
     else
     {
-      this.taa_jitter = Vector3( 0, 0, 0 );
+      this.taa_jitter = new Vector3( 0, 0, 0 );
     }
 
-    this.render_handler_gbuffer( scene.actors );
+    this.view              = scene.camera.transform.clone().invert();
+    this.view_proj         = (new Matrix4).multiplyMatrices(scene.camera.projection, this.view);
+    this.inverse_view_proj = this.view_proj.clone().invert();
 
-    this.prev_camera = this.camera_inverse.clone();
+    if ( !this.prev_view_proj )
+    {
+      this.prev_view      = this.view.clone();
+      this.prev_view_proj = this.view_proj.clone();
+    }
+
+    this.render_handler_gbuffer( scene );
+
       
-    this.taa_jitter = Vector3( 0, 0, 0 );
-    this.render_handler_directional_shadow( scene.actors );
+    this.render_handler_directional_shadow( scene );
     this.enable_pcf = this.enable_pcf;
 
-    this.render_handler_lighting( scene.actors );
+    this.render_handler_lighting( scene );
     this.render_handler_taa();
     this.render_handler_copy_temporal();
-    this.render_handler_post_processing( scene.actors );
-    this.render_handler_blit( scene.actors );
+    this.render_handler_post_processing();
+
+    this.render_handler_blit();
+
+    this.prev_view      = this.view.clone();
+    this.prev_view_proj = this.view_proj.clone();
+/*
+    this.prev_camera    = scene.camera.transform.clone();
+    this.prev_view_proj = this.view_proj.clone();
+    */
 
     this.frame_id++;
   }

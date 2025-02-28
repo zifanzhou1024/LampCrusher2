@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen } from './ui.js';
 
 // ---------- Game State Variables --------------
@@ -88,6 +89,8 @@ const camera = new THREE.PerspectiveCamera(
     75, window.innerWidth / window.innerHeight, 0.1, 1000
 );
 camera.position.set(0, 5, 15);
+
+console.log(camera);
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -193,6 +196,7 @@ function verletVerticalIntegration(object, acceleration, dt) {
 }
 
 // ----- Load the Lamp Model (OBJ + MTL) -----
+/*
 const mtlLoaderLamp = new MTLLoader();
 mtlLoaderLamp.setPath('assets/');
 mtlLoaderLamp.load('lamp.mtl', (materials) => {
@@ -220,6 +224,26 @@ mtlLoaderLamp.load('lamp.mtl', (materials) => {
             console.error('Error loading lamp:', error);
         }
     );
+});
+*/
+
+const gltfLoaderLamp = new GLTFLoader();
+gltfLoaderLamp.setPath('assets/');
+gltfLoaderLamp.load('lamp.glb', (gltf) => {
+    const object = gltf.scene;
+    console.log(object);
+
+    object.position.set(0, 0, -10);
+    object.scale.set(3, 3, 3);
+    object.rotation.y = -Math.PI / 2;
+    scene.add(object);
+    lamp = object;
+    // Initialize vertical integration state.
+    lamp.userData.previousY = lamp.position.y;
+    lampLight.position.set(0, 0.65, 0);
+    lamp.add(lampLight);
+    lampLight.target.position.set(0, -1, 10);
+    lamp.add(lampLight.target);
 });
 
 // ----- Helper Function to Load Static Letters -----

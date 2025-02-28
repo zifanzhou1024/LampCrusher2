@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<N10X>
+	<Workspace>
+		<IncludeFilter>*.*</IncludeFilter>
+		<ExcludeFilter>*.obj,*.lib,*.pch,*.dll,*.pdb,.vs,Debug,Release,x64,obj,*.user,Intermediate</ExcludeFilter>
+		<SyncFiles>true</SyncFiles>
+		<Recursive>true</Recursive>
+		<ShowEmptyFolders>true</ShowEmptyFolders>
+		<IncludeFilesWithoutExt>false</IncludeFilesWithoutExt>
+		<IsFolder>false</IsFolder>
+		<UseVisualStudioEnvBat>true</UseVisualStudioEnvBat>
+		<CaptureExeOutput>false</CaptureExeOutput>
+		<Configurations>
+			<Configuration>Debug</Configuration>
+			<Configuration>Release</Configuration>
+		</Configurations>
+		<Platforms>
+			<Platform>x64</Platform>
+		</Platforms>
+		<AdditionalIncludePaths>
+			<AdditionalIncludePath>C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.36.32532\include</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.36.32532\ATLMFC\include</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\VS\include</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files (x86)\Windows Kits\10\include\10.0.22000.0\ucrt</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files (x86)\Windows Kits\10\\include\10.0.22000.0\\um</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files (x86)\Windows Kits\10\\include\10.0.22000.0\\shared</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files (x86)\Windows Kits\10\\include\10.0.22000.0\\winrt</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files (x86)\Windows Kits\10\\include\10.0.22000.0\\cppwinrt</AdditionalIncludePath>
+			<AdditionalIncludePath>C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\include\um</AdditionalIncludePath>
+		</AdditionalIncludePaths>
+		<Defines></Defines>
+		<ConfigProperties></ConfigProperties>
+		<Children>
+			<Folder>
+				<Path>.git</Path>
+				<IncludeFilter>*.*</IncludeFilter>
+				<ExcludeFilter>*.obj,*.lib,*.pch,*.dll,*.pdb,.vs,Debug,Release,x64,obj,*.user,Intermediate</ExcludeFilter>
+				<SyncFiles>true</SyncFiles>
+				<Recursive>true</Recursive>
+				<ShowEmptyFolders>true</ShowEmptyFolders>
+				<IncludeFilesWithoutExt>false</IncludeFilesWithoutExt>
+				<Children></Children>
+			</Folder>
+			<Folder>
+				<Path>node_modules</Path>
+				<IncludeFilter>*.*</IncludeFilter>
+				<ExcludeFilter>*.obj,*.lib,*.pch,*.dll,*.pdb,.vs,Debug,Release,x64,obj,*.user,Intermediate</ExcludeFilter>
+				<SyncFiles>true</SyncFiles>
+				<Recursive>true</Recursive>
+				<ShowEmptyFolders>true</ShowEmptyFolders>
+				<IncludeFilesWithoutExt>false</IncludeFilesWithoutExt>
+				<Children></Children>
+			</Folder>
+			<File>
+				<Path>README.md</Path>
+			</File>
+			<File>
+				<Path>gpu.js</Path>
+			</File>
+			<File>
+				<Path>index.html</Path>
+			</File>
+			<File>
+				<Path>lamp_crusher.js</Path>
+			</File>
+			<File>
+				<Path>package-lock.json</Path>
+			</File>
+			<File>
+				<Path>main.js</Path>
+			</File>
+			<File>
+				<Path>package.json</Path>
+			</File>
+			<File>
+				<Path>renderer.js</Path>
+			</File>
+			<File>
+				<Path>shaders.js</Path>
+			</File>
+			<File>
+				<Path>.gitignore</Path>
+			</File>
+			<Folder>
+				<Path>assets</Path>
+				<IncludeFilter>*.*</IncludeFilter>
+				<ExcludeFilter>*.obj,*.lib,*.pch,*.dll,*.pdb,.vs,Debug,Release,x64,obj,*.user,Intermediate</ExcludeFilter>
+				<SyncFiles>true</SyncFiles>
+				<Recursive>true</Recursive>
+				<ShowEmptyFolders>true</ShowEmptyFolders>
+				<IncludeFilesWithoutExt>false</IncludeFilesWithoutExt>
+				<Children></Children>
+			</Folder>
+			<File>
+				<Path>lamp_crusher_two.js</Path>
+			</File>
+			<File>
+				<Path>ui.js</Path>
+			</File>
+		</Children>
+	</Workspace>
+</N10X>

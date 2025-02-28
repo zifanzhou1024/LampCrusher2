@@ -8,7 +8,7 @@ export const kShaders = {
 
     attribute vec3 position;
     attribute vec3 normal;
-    attribute vec2 texture_coord;
+    attribute vec2 uv;
 
     uniform mat4 g_Model;
     uniform mat4 g_ViewProj;
@@ -16,22 +16,26 @@ export const kShaders = {
     uniform mat4 g_PrevModel;
     uniform mat4 g_PrevViewProj;
 
-    uniform vec3 g_SquaredScale;
-
     uniform vec3 g_TAAJitter;
         
     void main()
-    {                                                                   
+    {
       vec4 ws_pos      = g_Model    * vec4( position, 1.0 );
       vec4 ndc_pos     = g_ViewProj * ws_pos;
 
       vec4 prev_ws_pos = g_PrevModel    * vec4( position, 1.0 );
       vec4 prev_ndc    = g_PrevViewProj * prev_ws_pos;
 
+      vec3 normal_scale = vec3(
+        dot(g_Model[0].xyz, g_Model[0].xyz),
+        dot(g_Model[1].xyz, g_Model[1].xyz),
+        dot(g_Model[2].xyz, g_Model[2].xyz)
+      );
+
       f_NDCPos         = ndc_pos;
       f_PrevNDCPos     = prev_ndc;
-      f_Normal         = normalize( mat3( g_Model ) * normal / g_SquaredScale );
-      f_UV             = texture_coord;
+      f_Normal         = normalize( mat3( g_Model ) * ( normal / normal_scale ) );
+      f_UV             = uv;
 
       gl_Position      = ndc_pos + vec4( g_TAAJitter.xy * ndc_pos.w, 0.0, 0.0 );
     } `,
@@ -74,24 +78,24 @@ export const kShaders = {
 
       vec2  velocity   = calculate_velocity( f_PrevNDCPos, f_NDCPos );
 
-      gl_FragData[ 0 ] = vec4( diffuse,  metallic );
+      gl_FragData[ 0 ] = vec4( diffuse, metallic );
       gl_FragData[ 1 ] = vec4( f_Normal, roughness );
       gl_FragData[ 2 ] = vec4( velocity, 0.0, 0.0 );
     }`,
 
   'VS_FullscreenQuad': `
     precision mediump float;
-
+    
     attribute vec3 position;
     attribute vec3 normal;
-    attribute vec2 texture_coord;
+    attribute vec2 uv;
 
     varying vec2 f_UV;
         
     void main()
     {                                                                   
       gl_Position = vec4( position.xy, 0.0, 1.0 );
-      f_UV        = texture_coord;
+      f_UV        = uv;
     }`,
 
   'PS_Blit': `
@@ -361,9 +365,9 @@ export const kShaders = {
           diffuse
         );
 
-        vec3 irradiance = directional * ( 1.0 - shadow ) + spot_light;
+        vec3 irradiance = directional + spot_light; //  * ( 1.0 - shadow ) ;
 
-        gl_FragColor    =  depth == 1.0 ? vec4( g_SkyColor, 1.0 ) : vec4( irradiance, 1.0 );
+        gl_FragColor    =  depth == 0.0 ? vec4( g_SkyColor, 1.0 ) : vec4( irradiance, 1.0 );
       }`,
   
   'PS_TAA': `
@@ -390,6 +394,21 @@ export const kShaders = {
       return texel;
     }
 
+    float luma_rec709( vec3 color )
+    {
+      return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+    }
+
+    vec3 luma_weight_color_rec709( vec3 color )
+    {
+      return color / ( 1.0 + luma_rec709( color ) );
+    }
+
+    vec3 inverse_luma_weight_color_rec709( vec3 color )
+    {
+      return color / ( 1.0 - luma_rec709( color ) );
+    }
+
     void tap_curr_buffer(
       vec2 texel_offset,
       vec2 texel,
@@ -397,7 +416,8 @@ export const kShaders = {
       inout vec3 max_color
     ) {
       vec2 uv    = texel_to_uv( texel + texel_offset );
-      vec3 color = texture2D( g_PBRBuffer, uv ).rgb;
+      vec3 color = luma_weight_color_rec709( texture2D( g_PBRBuffer, uv ).rgb );
+
       min_color  = min( min_color, color );
       max_color  = max( max_color, color );
     }
@@ -424,6 +444,7 @@ export const kShaders = {
 
       return closest_texel_pos;
     }
+
 
     void main()
     {                                                           
@@ -459,11 +480,13 @@ export const kShaders = {
       float acceleration          = length( prev_velocity - curr_velocity );
       float velocity_disocclusion = clamp( ( acceleration - 0.001 ) * 10.0, 0.0, 1.0 );
 
-      vec3 curr_color    = texture2D( g_PBRBuffer,     uv ).rgb;
-      vec3 prev_color    = clamp( texture2D( g_AccumulationBuffer, reproj_uv ).rgb, min_color, max_color );
+      vec3 curr_color    = luma_weight_color_rec709( texture2D( g_PBRBuffer,     uv ).rgb );
+      vec3 prev_color    = luma_weight_color_rec709( texture2D( g_AccumulationBuffer, reproj_uv ).rgb );
+      prev_color         = clamp( prev_color, min_color, max_color );
       vec3 accumulation  = 0.9 * prev_color + 0.1 * curr_color;
         
-      gl_FragColor       = vec4( mix( accumulation, curr_color, velocity_disocclusion ), 1.0 );
+      vec3 resolve       = mix( accumulation, curr_color, velocity_disocclusion );
+      gl_FragColor       = vec4( inverse_luma_weight_color_rec709( resolve ), 1.0 );
     }`,
 
   'PS_Tonemapping': `

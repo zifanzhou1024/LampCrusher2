@@ -6,18 +6,6 @@ import { Vector2, Vector3, Vector4, Matrix4 } from 'three';
 
 // Lamp source
 // https://www.cgtrader.com/free-3d-models/furniture/lamp/pixar-lamp-518a1299-ae8f-4847-ba1a-110d4f68d172
-export class Actor {
-  constructor() {
-    this.transform = Matrix4.identity();
-    this.mesh = null;
-    this.material = null;
-    this.bounding_box = null; // Optional bounding box for collision detection
-    this.active = true; // Set to false to remove the actor from the scene - not used anymore?
-    this.squishing = false; // Flag to indicate if the actor is squishing
-    this.squish_timer = 0; // Timer for the squishing animation
-    this.original_height = 1; // Store original height for squishing
-  }
-}
 
 export class LampCrusher {
 constructor() {
