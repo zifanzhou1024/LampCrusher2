@@ -1,5 +1,9 @@
 name: CI and Deploy
 
+# Grant write permissions for contents so the token can push to gh-pages
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main ]
