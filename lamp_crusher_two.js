@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen } from './ui.js';
 
@@ -266,36 +267,121 @@ function verletVerticalIntegration(object, acceleration, dt) {
     object.position.y = newY;
 }
 
-// ----- Helper to Load the Lamp Model (OBJ + MTL) -----
-const mtlLoaderLamp = new MTLLoader();
-mtlLoaderLamp.setPath('assets/');
-mtlLoaderLamp.load('lamp.mtl', (materials) => {
-    materials.preload();
-    const objLoaderLamp = new OBJLoader();
-    objLoaderLamp.setMaterials(materials);
-    objLoaderLamp.setPath('assets/');
-    objLoaderLamp.load('lamp.obj',
-        (object) => {
-            object.position.set(-3, 0, 5);
-            object.scale.set(3, 3, 3);
-            object.rotation.y = -Math.PI / 2;
-            scene.add(object);
-            lamp = object;
-            // Initialize vertical integration state.
-            lamp.userData.previousY = lamp.position.y;
-            lampLight.position.set(0, 0.65, 0);
-            lamp.add(lampLight);
-            lampLight.target.position.set(0, -1, 10);
-            lamp.add(lampLight.target);
-        },
-        (xhr) => {
-            console.log((xhr.loaded / xhr.total * 100) + '% loaded for lamp');
-        },
-        (error) => {
-            console.error('Error loading lamp:', error);
+
+// ----- Load Lamp Skeleton and Parts -----
+const fbxLoader = new FBXLoader();
+const lampParts = {}; 
+window.lampParts = lampParts;
+let lampSkeleton = null;
+lamp = new THREE.Group();
+
+fbxLoader.load('assets/lamp_skeleton.fbx', (skeleton) => {
+    lampSkeleton = skeleton;
+
+    lampSkeleton.position.set(0, 0, 0);
+    lampSkeleton.rotation.set(0, 0, 0);
+    lampSkeleton.scale.set(1, 1, 1);
+
+    lampSkeleton.traverse((child) => {
+        if (child.isBone) {
+            console.log("Found bone:", child.name);
+            lampParts[child.name] = child;
+
+            child.rotation.set(0, 0, 0);
         }
-    );
+    });
+
+    console.log("Lamp Skeleton Loaded, Detected Joints:", Object.keys(lampParts));
+    checkAndAssembleLamp();
 });
+
+function loadLampPart(name, file, parentJoint) {
+    fbxLoader.load(`assets/${file}`, (object) => {
+        console.log(`Loaded part: ${name}, trying to attach to ${parentJoint}`);
+
+        object.position.set(0, 0, 0);
+        object.rotation.set(0, 0, 0);
+        object.scale.set(1, 1, 1);
+
+        if (lampParts[parentJoint]) {
+            lampParts[parentJoint].add(object);
+        } else {
+            console.error(`Parent joint ${parentJoint} not found for ${name}!`);
+        }
+
+        lampParts[name] = object;
+        checkAndAssembleLamp();
+    }, undefined, (error) => {
+        console.error(`Error loading ${name}:`, error);
+    });
+}
+
+loadLampPart('lamp_base', 'lamp_base.fbx', 'base_joint');
+loadLampPart('lower_arm', 'lower_lamp_arm.fbx', 'lower_arm_joint');
+loadLampPart('upper_arm', 'upper_lamp_arm.fbx', 'upper_arm_joint');
+loadLampPart('head_cover', 'head_cover.fbx', 'head_joint');
+
+function checkAndAssembleLamp() {
+    if (!lampSkeleton) return;
+    if (!lampParts['lamp_base'] || !lampParts['lower_arm'] || !lampParts['upper_arm'] || !lampParts['head_cover']) {
+        console.log("Waiting for all lamp parts to load...");
+        return;
+    }
+
+    console.log("All parts loaded! Assembling lamp...");
+    assembleLamp();
+}
+
+function assembleLamp() {
+    if (!lampSkeleton) {
+        console.error("assembleLamp() called but lampSkeleton is null!");
+        return;
+    }
+
+    if (!lampParts['lamp_base'] || !lampParts['lower_arm'] || !lampParts['upper_arm'] || !lampParts['head_cover']) {
+        console.error("assembleLamp() called but some parts are missing!", lampParts);
+        return;
+    }
+
+    console.log("Assembling lamp...");
+
+    lampSkeleton.position.set(0, 0, 0);
+    lampSkeleton.rotation.set(0, 0, 0);
+    
+    lampParts['base_joint'].position.set(0, 0, 0);
+    lampParts['lower_arm_joint'].position.set(0, 0, 0);
+    lampParts['upper_arm_joint'].position.set(0, 0, 0);
+    lampParts['head_joint'].position.set(0, 0, 0);
+
+    lampParts['lamp_base'].position.set(0, 0, 0);
+    lampParts['lower_arm'].position.set(0, 0, 0);
+    lampParts['upper_arm'].position.set(0, 0, 0);
+    lampParts['head_cover'].position.set(0, 0, 0);
+
+    lampParts['lamp_base'].rotation.set(0, 0, 0);
+    lampParts['lower_arm'].rotation.set(0, 0, 0);
+    lampParts['upper_arm'].rotation.set(0, 0, 0);
+    lampParts['head_cover'].rotation.set(0, 0, 0);
+
+    lampParts['base_joint'].add(lampParts['lamp_base']);
+    lampParts['lower_arm_joint'].add(lampParts['lower_arm']);
+    lampParts['upper_arm_joint'].add(lampParts['upper_arm']);
+    lampParts['head_joint'].add(lampParts['head_cover']);
+
+    lamp.add(lampSkeleton);
+
+    lamp.position.set(-3, 0, 5);
+    lamp.scale.set(3, 3, 3);
+    lamp.rotation.y = -Math.PI / 2;
+
+    lampLight.position.set(0, 0.65, 0);
+    lampParts['head_cover'].add(lampLight);
+    lampParts['head_cover'].add(lampLight.target);
+
+    scene.add(lamp);
+    console.log("Lamp successfully added to scene!");
+}
+
 
 // ----- Functions to Load Static Letters -----
 function loadLetter(letter, posX, posY, posZ) {
