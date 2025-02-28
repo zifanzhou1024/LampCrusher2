@@ -22,6 +22,9 @@ let firstPersonView = false;  // defaults to third-person view
 let vKeyPressed = false;
 let pKeyPressed = false;
 
+// Toggle for persistent bounding boxes (via 'b')
+let persistentBB = false;
+
 // Initialize UI elements.
 const { startMenu } = initializeUI();
 
@@ -32,15 +35,23 @@ const keyStates = {};
 const staticLetters = [];
 const fallingLetters = [];
 
+// Global array to store our OBB helpers.
+let boundingBoxHelpers = [];
+
 // Camera control variables (for third-person view)
 let cameraRotationX = currentGameMode === 'intro' ? 0 : -0.2;
 let cameraRotationY = 0;
 let cameraDistance = 15;
 
-// ---------- Event Listeners ----------
+// ---------- Event Listeners --------------
 window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase();
     keyStates[key] = true;
+    // Toggle persistent bounding boxes when 'b' is pressed.
+    if (key === 'b') {
+        persistentBB = !persistentBB;
+        console.log("Persistent bounding boxes toggled:", persistentBB);
+    }
     // Only allow toggling views outside the intro state.
     if (key === 'v' && !vKeyPressed && currentGameMode !== 'intro') {
         firstPersonView = !firstPersonView;
@@ -48,9 +59,10 @@ window.addEventListener('keydown', (event) => {
         console.log("View mode toggled. First-person:", firstPersonView);
     }
     if (key === 'p' && !pKeyPressed) {
+        // 'p' already toggles healthDecreasePaused (the pause state)
         healthDecreasePaused = !healthDecreasePaused;
         pKeyPressed = true;
-        console.log("Health decrease paused:", healthDecreasePaused);
+        console.log("Health decrease paused (pause state):", healthDecreasePaused);
     }
 });
 window.addEventListener('keyup', (event) => {
@@ -129,6 +141,7 @@ scene.add(lampLight);
 scene.add(lampLight.target);
 
 // ----- Custom OBB Functions -----
+// Computes an oriented bounding box from an object.
 function getOBB(object, collisionScale = 1) {
     object.updateWorldMatrix(true, false);
     let aabb = new THREE.Box3().setFromObject(object);
@@ -178,6 +191,56 @@ function obbIntersect(obb1, obb2) {
         }
     }
     return true;
+}
+
+// ----- OBB Helper Functions -----
+// Compute the eight corners of an oriented bounding box.
+function computeOBBCorners(obb) {
+    const { center, axes, halfSizes } = obb;
+    const corners = [];
+    for (let dx of [-1, 1]) {
+        for (let dy of [-1, 1]) {
+            for (let dz of [-1, 1]) {
+                let corner = new THREE.Vector3().copy(center);
+                corner.add(new THREE.Vector3().copy(axes[0]).multiplyScalar(dx * halfSizes.x));
+                corner.add(new THREE.Vector3().copy(axes[1]).multiplyScalar(dy * halfSizes.y));
+                corner.add(new THREE.Vector3().copy(axes[2]).multiplyScalar(dz * halfSizes.z));
+                corners.push(corner);
+            }
+        }
+    }
+    return corners;
+}
+
+// Create a line-segment helper (wireframe) for the given OBB.
+function createOBBHelper(obb, color) {
+    const corners = computeOBBCorners(obb);
+    // Based on the order of the nested loops in computeOBBCorners,
+    // the indices are as follows:
+    // 0: (-1,-1,-1), 1: (-1,-1, 1), 2: (-1, 1,-1), 3: (-1, 1, 1),
+    // 4: ( 1,-1,-1), 5: ( 1,-1, 1), 6: ( 1, 1,-1), 7: ( 1, 1, 1)
+    const edges = [
+        [0,1],[1,3],[3,2],[2,0],  // bottom and top faces (for dx = -1)
+        [4,5],[5,7],[7,6],[6,4],  // bottom and top faces (for dx = 1)
+        [0,4],[1,5],[2,6],[3,7]   // connecting edges
+    ];
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(edges.length * 2 * 3);
+    let ptr = 0;
+    for (let edge of edges) {
+        const a = corners[edge[0]];
+        const b = corners[edge[1]];
+        positions[ptr++] = a.x;
+        positions[ptr++] = a.y;
+        positions[ptr++] = a.z;
+        positions[ptr++] = b.x;
+        positions[ptr++] = b.y;
+        positions[ptr++] = b.z;
+    }
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({ color: color });
+    const lineSegments = new THREE.LineSegments(geometry, material);
+    return lineSegments;
 }
 
 // ----- Verlet Integration Helper Functions -----
@@ -539,12 +602,15 @@ function animate() {
             if (move.lengthSq() > 0) {
                 move.normalize();
                 lamp.position.addScaledVector(move, speed);
-                // Rotate lamp to face movement direction.
-                lamp.lookAt(
-                    lamp.position.x + move.x,
-                    lamp.position.y,
-                    lamp.position.z + move.z
-                );
+
+                // --- Smooth Turning Implementation ---
+                // Calculate the target angle from the movement vector.
+                const targetAngle = Math.atan2(move.x, move.z);
+                const rotationSpeed = 0.6; // Adjust for smoother turning.
+                let angleDiff = targetAngle - lamp.rotation.y;
+                // Normalize angleDiff to [-π, π]
+                angleDiff = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                lamp.rotation.y += angleDiff * rotationSpeed;
             }
 
             // Jump when space is pressed.
@@ -687,6 +753,36 @@ function animate() {
 
     // Update particle systems (fade out / remove)
     updateParticles();
+
+    // -------- Bounding Box Visualization --------
+    // Draw the bounding boxes if the game is paused (via 'p') or if persistent mode is enabled (toggled via 'b').
+    if (healthDecreasePaused && persistentBB) {
+        // Remove any existing helpers
+        boundingBoxHelpers.forEach(helper => scene.remove(helper));
+        boundingBoxHelpers = [];
+        // Create new helpers using our OBB (not the axis-aligned BoxHelper).
+        if (lamp) {
+            let obb = getOBB(lamp, lampCollisionScale);
+            let helper = createOBBHelper(obb, 0xff0000);
+            scene.add(helper);
+            boundingBoxHelpers.push(helper);
+        }
+        staticLetters.forEach(obj => {
+            let obb = getOBB(obj, letterCollisionScale);
+            let helper = createOBBHelper(obb, 0x00ff00);
+            scene.add(helper);
+            boundingBoxHelpers.push(helper);
+        });
+        fallingLetters.forEach(obj => {
+            let obb = getOBB(obj, letterCollisionScale);
+            let helper = createOBBHelper(obb, 0x0000ff);
+            scene.add(helper);
+            boundingBoxHelpers.push(helper);
+        });
+    } else {
+        boundingBoxHelpers.forEach(helper => scene.remove(helper));
+        boundingBoxHelpers = [];
+    }
 
     renderer.render(scene, camera);
 }
