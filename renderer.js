@@ -2,7 +2,7 @@ import { gl, g_CurrentPSO, GpuDevice, GpuMesh, GpuVertexShader, GpuFragmentShade
 import { kShaders } from "./shaders.js"
 
 import * as THREE from 'three';
-import { Vector2, Vector3, Vector4, Matrix4 } from 'three';
+import { Vector2, Vector3, Vector4, Matrix4, Euler, Quaternion, Box3 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
@@ -59,6 +59,67 @@ export class Actor
     this.mesh           = mesh;
     this.material       = material;
     this.bounding_box   = null;
+    this.force          = new Vector3( 0.0, 0.0, 0.0 );
+  }
+
+  set_position_euler_scale( position, euler, scale )
+  {
+    const rotation = new Quaternion();
+    rotation.setFromEuler( euler );
+    this.transform.compose( position, rotation, scale );
+  }
+
+  set_position( pos )
+  {
+    this.transform.setPosition( pos );
+  }
+
+  set_euler( euler )
+  {
+    const position = new Vector3();
+    const rotation = new Quaternion();
+    const scale    = new Vector3();
+    this.transform.decompose( position, rotation, scale );
+    rotation.setFromEuler( euler );
+    this.transform.compose( position, rotation, scale )
+  }
+
+  set_scale( scale )
+  {
+    const position = new Vector3();
+    const rotation = new Quaternion();
+    this.transform.decompose( position, rotation, new Vector3() );
+    this.transform.compose( position, rotation, scale )
+  }
+
+  add_force( force )
+  {
+    this.force.add( force );
+  }
+
+  get_position()
+  {
+    return ( new Vector3() ).setFromMatrixPosition( this.transform );
+  }
+
+  get_prev_position()
+  {
+    return ( new Vector3() ).setFromMatrixPosition( this.prev_transform );
+  }
+
+  get_euler()
+  {
+    return ( new Euler() ).setFromRotationMatrix( this.transform, 'ZXY' );
+  }
+
+  get_quat()
+  {
+    return ( new Quaternion() ).setFromRotationMatrix( this.transform );
+  }
+
+  get_scale()
+  {
+    return ( new Vector3() ).setFromMatrixScale( this.transform );
   }
 }
 
@@ -94,6 +155,7 @@ export class Model
   {
     this.name    = name;
     this.subsets = model_subsets;
+    this.aabb    = new Box3();
   }
 
   draw( model_uniform, model, prev_model_uniform, prev_model )
@@ -116,16 +178,54 @@ export class Camera
 
     this.projection    = perspective_infinite_reverse_rh( fov_y_rad, aspect_ratio, 0.1 );
   }
+
+  get_position()
+  {
+    return new Vector3().setFromMatrixPosition( this.transform );
+  }
+
+  look_at( target )
+  {
+    const position       = this.get_position();
+    const kUp            = new Vector3( 0.0, 1.0, 0.0 );
+    const look_at_matrix = new Matrix4().lookAt( position, target, kUp );
+
+    const basis_x        = new Vector3();
+    const basis_y        = new Vector3();
+    const basis_z        = new Vector3();
+
+    look_at_matrix.extractBasis( basis_x, basis_y, basis_z );
+
+    this.transform.makeBasis( basis_x, basis_y, basis_z ).setPosition( position );
+  }
+
+  get_forward()
+  {
+    const forward = new Vector4( 0.0, 0.0, -1.0, 0.0 ).applyMatrix4( this.transform );
+    return forward.normalize();
+  }
 }
 
 export class Scene
 {
   constructor()
   {
-    this.actors            = [];
+    this.actors            = new Map();
     this.camera            = null;
     this.directional_light = null;
     this.spot_light        = null;
+    this.actor_id          = 0;
+  }
+
+  add( actor )
+  {
+    actor.id = ++this.actor_id;
+    this.actors.set( actor.id, actor );
+  }
+
+  remove( actor )
+  {
+    actor.id = 0;
   }
 }
 
@@ -208,7 +308,7 @@ export const kCubeMesh = new GpuMesh(
 export function load_gltf_model( asset )
 {
   const loader = new GLTFLoader();
-  loader.setPath( 'assets/' );
+  loader.setPath( 'public/assets/' );
   return new Promise( ( resolve, reject ) =>
   {
     loader.load( asset, ( gltf ) =>
@@ -395,7 +495,7 @@ export class Renderer
     );
     this.blit_buffer     = RenderBuffers.kPostProcessing;
     this.frame_id        = 0;
-    this.enable_taa      = true;
+    this.enable_taa      = false;
     this.enable_pcf      = true;
   }
 
@@ -647,33 +747,36 @@ export class Renderer
     gl.disable( gl.BLEND );
     gl.enable( gl.DEPTH_TEST );
 
-    for ( let iactor = 0; iactor < scene.actors.length; iactor++ )
-    {
-      const actor = scene.actors[ iactor ];
-      if ( !actor.mesh || !actor.material )
-        continue;
-      if ( !actor.prev_transform )
+    scene.actors.forEach( 
+      ( actor ) =>
       {
+        if ( !actor.mesh || !actor.material )
+        {
+          return;
+        }
+        if ( !actor.prev_transform )
+        {
+          actor.prev_transform = actor.transform;
+        }
+      
+        actor.material.bind(
+          {
+            g_ViewProj:     this.view_proj.elements,
+            g_PrevViewProj: this.prev_view_proj.elements,
+            g_TAAJitter:    this.taa_jitter.toArray(),
+          }
+        );
+
+        actor.mesh.draw( 'g_Model', actor.transform, 'g_PrevModel', actor.prev_transform );
+
+        const error = gl.getError();
+        if ( error !== gl.NO_ERROR )
+        {
+          console.error( "WebGL error: " + error );
+        }
         actor.prev_transform = actor.transform;
       }
-
-      actor.material.bind(
-        {
-          g_ViewProj:     this.view_proj.elements,
-          g_PrevViewProj: this.prev_view_proj.elements,
-          g_TAAJitter:    this.taa_jitter.toArray(),
-        }
-      );
-
-      actor.mesh.draw( 'g_Model', actor.transform, 'g_PrevModel', actor.prev_transform );
-
-      const error = gl.getError();
-      if ( error !== gl.NO_ERROR )
-      {
-        console.error( "WebGL error: " + error );
-      }
-      actor.prev_transform = actor.transform;
-    }
+    );
   }
 
 
@@ -695,20 +798,23 @@ export class Renderer
     this.directional_light_view      = (new Matrix4).lookAt( camera_center, center_of_interest, new Vector3( 0, 0, 1 ) );
     this.directional_light_view_proj = (new Matrix4()).multiplyMatrices( this.directional_light_proj, this.directional_light_view );
 
-    for ( let iactor = 0; iactor < scene.actors.length; iactor++ )
-    {
-      const actor = scene.actors[ iactor ];
-      if ( !actor.mesh || !actor.material )
-        continue;
-
-      actor.material.bind(
+    scene.actors.forEach(
+      ( actor ) =>
+      {
+        if ( !actor.mesh || !actor.material )
         {
-          g_Model:    actor.transform.elements,
-          g_ViewProj: this.directional_light_view_proj.elements,
+          return;
         }
-      )
-      actor.mesh.draw();
-    }
+
+        actor.material.bind(
+          {
+            g_Model:    actor.transform.elements,
+            g_ViewProj: this.directional_light_view_proj.elements,
+          }
+        )
+        actor.mesh.draw();
+      }
+    );
   }
 
 /*
@@ -736,13 +842,17 @@ export class Renderer
     program_state.set_camera( program_state.directional_light_view );
     program_state.projection_transform = program_state.directional_light_proj;
 
-    for ( let iactor = 0; iactor < actors.length; iactor++ )
-    {
-      const actor = actors[ iactor ];
-      if ( !actor.mesh || !actor.material )
-        continue;
-      actor.mesh.draw( context, program_state, actor, actor.material );
-    }
+    scene.actors.forEach(
+      ( actor ) =>
+      {
+        const actor = actors[ iactor ];
+        if ( !actor.mesh || !actor.material )
+        {
+          return;
+        }
+        actor.mesh.draw( context, program_state, actor, actor.material );
+      }
+    );
 
     program_state.set_camera( orig_view );
     program_state.projection_transform = orig_proj;
@@ -801,7 +911,8 @@ export class Renderer
     }
     else
     {
-      this.quad.draw( context, program_state, null, this.blit.override( { texture: this.render_buffers[ RenderBuffers.kPBRLighting ] } ) );
+      this.blit.bind( { g_Sampler: this.render_buffers[ RenderBuffers.kPBRLighting ] } );
+      this.quad.draw();
     }
   }
 
@@ -887,10 +998,6 @@ export class Renderer
 
     this.prev_view      = this.view.clone();
     this.prev_view_proj = this.view_proj.clone();
-/*
-    this.prev_camera    = scene.camera.transform.clone();
-    this.prev_view_proj = this.view_proj.clone();
-    */
 
     this.frame_id++;
   }

@@ -1,538 +1,786 @@
 // lamp_crusher_two.js
+import { GpuDevice, GpuMesh, gl } from "./gpu.js"
+import { kShaders } from "./shaders.js"
+import { Actor, Scene, Camera, Material, Renderer, DirectionalLight, SpotLight, kGroundMesh, kCubeMesh, load_gltf_model } from './renderer.js'
 
 import * as THREE from 'three';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { Vector2, Vector3, Vector4, Matrix4, Euler } from 'three';
 import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen } from './ui.js';
 
-// ---------- Game State Variables --------------
-let gameStarted = false;
-let gameOver = false;
-let health = 100;
-let score = 0;
-let startTime = 0;
-let letterSpawnTimer = 0;          // accumulates time for spawning falling letters
-let currentSpawnInterval = 2;      // initial spawn interval (in seconds)
-let currentGameMode = 'normal';    // 'normal' or 'demo'
-let healthDecreasePaused = false;  // New variable to pause health decrease
+const canvas = document.getElementById("gl_canvas");
 
-// Initialize UI elements.
-const { startMenu } = initializeUI();
 
-// ----- Global Variables for Lamp Control -----
-let lamp = null; // the lamp object once loaded.
-const keyStates = {};
-let firstPersonView = false;  // default to third-person view.
-let vKeyPressed = false;      // prevent continuous toggling.
-let pKeyPressed = false;      // prevent continuous toggling for pause
-
-const staticLetters = [];
-const fallingLetters = [];
-
-let cameraRotationX = 0;
-let cameraRotationY = 0;
-let cameraDistance = 15;
-
-// ---------- Event Listeners ----------
-window.addEventListener('keydown', (event) => {
-    const key = event.key.toLowerCase();
-    keyStates[key] = true;
-    if (key === 'v' && !vKeyPressed) {
-        firstPersonView = !firstPersonView;
-        vKeyPressed = true;
-        console.log("View mode toggled. First-person:", firstPersonView);
+class Letter extends Actor
+{
+    constructor(model, material)
+    {
+        super(model, material);
+        this.squishing = false;
+        this.squishElapsed = 0.0;
+        this.squishDuration = 0.0;
+        this.original_scale = this.get_scale();
+        this.hasHitGround = false;
     }
-    if (key === 'p' && !pKeyPressed) {
-        healthDecreasePaused = !healthDecreasePaused;
-        pKeyPressed = true;
-        console.log("Health decrease paused:", healthDecreasePaused);
-    }
-});
-window.addEventListener('keyup', (event) => {
-    const key = event.key.toLowerCase();
-    keyStates[key] = false;
-    if (key === 'v') {
-        vKeyPressed = false;
-    }
-    if (key === 'p') {
-        pKeyPressed = false;
-    }
-});
-window.addEventListener('mousemove', (event) => {
-    if (document.pointerLockElement === renderer.domElement) {
-        const sensitivity = 0.002;
-        cameraRotationX += event.movementY * sensitivity;
-        cameraRotationY -= event.movementX * sensitivity;
-        cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
-    }
-});
-window.addEventListener('wheel', (event) => {
-    event.preventDefault();
-    cameraDistance += event.deltaY * 0.01;
-    cameraDistance = Math.max(5, Math.min(50, cameraDistance));
-});
-
-// Variables for jump physics.
-let lampIsJumping = false;
-const gravity = -9.8;
-const jumpStrength = 6;
-let lampInitialY = 0;
-
-const clock = new THREE.Clock();
-
-// ----- Three.js Scene Setup -----
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x6689FF);  // Blue background
-
-const camera = new THREE.PerspectiveCamera(
-    75, window.innerWidth / window.innerHeight, 0.1, 1000
-);
-camera.position.set(0, 5, 15);
-
-console.log(camera);
-
-const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setAnimationLoop(animate);
-document.body.appendChild(renderer.domElement);
-
-// Request pointer lock on click.
-renderer.domElement.addEventListener('click', () => {
-    renderer.domElement.requestPointerLock();
-});
-
-// ----- Ground -----
-const groundGeometry = new THREE.PlaneGeometry(200, 200);
-const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x6689FF });
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = 0;
-scene.add(ground);
-
-// ----- Lights -----
-const ambientLight = new THREE.AmbientLight(0x6689FF, 0.5);
-scene.add(ambientLight);
-
-const lampLight = new THREE.SpotLight(0xffffff, 6, 100, Math.PI / 4, 0.1, 1);
-lampLight.position.set(0, 0, 5);
-lampLight.target.position.set(0, -1, 10);
-scene.add(lampLight);
-scene.add(lampLight.target);
-
-// ----- Custom OBB Functions -----
-function getOBB(object, collisionScale = 1) {
-    object.updateWorldMatrix(true, false);
-    let aabb = new THREE.Box3().setFromObject(object);
-    let center = new THREE.Vector3();
-    aabb.getCenter(center);
-    let size = new THREE.Vector3();
-    aabb.getSize(size);
-    let halfSizes = size.multiplyScalar(0.5).multiplyScalar(collisionScale);
-    let m = object.matrixWorld;
-    let axes = [
-        new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
-        new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).normalize(),
-        new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).normalize()
-    ];
-    return { center, axes, halfSizes };
 }
 
-function halfProjection(obb, axis) {
-    return obb.halfSizes.x * Math.abs(axis.dot(obb.axes[0])) +
-        obb.halfSizes.y * Math.abs(axis.dot(obb.axes[1])) +
-        obb.halfSizes.z * Math.abs(axis.dot(obb.axes[2]));
+class Lamp extends Actor
+{
+    constructor(model, material)
+    {
+        super(model, material);
+    }
 }
 
-function obbIntersect(obb1, obb2) {
-    let axes = [];
-    axes.push(obb1.axes[0], obb1.axes[1], obb1.axes[2],
-        obb2.axes[0], obb2.axes[1], obb2.axes[2]);
-    for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-            let axis = new THREE.Vector3().crossVectors(obb1.axes[i], obb2.axes[j]);
-            if (axis.lengthSq() > 1e-6) {
-                axis.normalize();
-                axes.push(axis);
-            }
+async function main()
+{
+    // ---------- Game State Variables --------------
+    let gameStarted = false;
+    let gameOver = false;
+    let health = 100;
+    let score = 0;
+    let startTime = 0;
+    let letterSpawnTimer = 0;
+    let currentSpawnInterval = 2;
+    // Game mode is one of 'intro', 'normal', or 'demo'
+    let currentGameMode = 'intro';
+    let healthDecreasePaused = false;  // Allows pausing health decrease
+
+    // View toggle variables (only active in non-intro modes)
+    let firstPersonView = false;  // defaults to third-person view
+    let vKeyPressed = false;
+    let pKeyPressed = false;
+
+    // Toggle for persistent bounding boxes (via 'b')
+    let persistentBB = false;
+
+    // Initialize UI elements.
+    const { startMenu } = initializeUI();
+
+    // ----- Global Variables for Lamp & Letters -----
+    const keyStates = {};
+
+    // Global array to store our OBB helpers.
+    let boundingBoxHelpers = [];
+
+    // Camera control variables (for third-person view)
+    let cameraRotationX = currentGameMode === 'intro' ? 0 : -0.2;
+    let cameraRotationY = 0;
+    let cameraDistance = 15;
+
+    // ---------- Event Listeners --------------
+    window.addEventListener('keydown', (event) => {
+        const key = event.key.toLowerCase();
+        keyStates[key] = true;
+        // Toggle persistent bounding boxes when 'b' is pressed.
+        if (key === 'b') {
+            persistentBB = !persistentBB;
+            console.log("Persistent bounding boxes toggled:", persistentBB);
         }
-    }
-    let tVec = new THREE.Vector3().subVectors(obb2.center, obb1.center);
-    for (let i = 0; i < axes.length; i++) {
-        let axis = axes[i];
-        let r1 = halfProjection(obb1, axis);
-        let r2 = halfProjection(obb2, axis);
-        let t = Math.abs(tVec.dot(axis));
-        if (t > r1 + r2) {
-            return false;
+        // Only allow toggling views outside the intro state.
+        if (key === 'v' && !vKeyPressed && currentGameMode !== 'intro') {
+            firstPersonView = !firstPersonView;
+            vKeyPressed = true;
+            console.log("View mode toggled. First-person:", firstPersonView);
         }
-    }
-    return true;
-}
-
-// ----- Verlet Integration Helper Functions -----
-// For falling letters (updates full position)
-function verletIntegration(object, acceleration, dt) {
-    if (!object.userData.previousPosition) {
-        object.userData.previousPosition = object.position.clone();
-    }
-    const currentPos = object.position.clone();
-    const newPos = currentPos.clone().multiplyScalar(2)
-        .sub(object.userData.previousPosition)
-        .add(acceleration.clone().multiplyScalar(dt * dt));
-    object.userData.previousPosition.copy(currentPos);
-    object.position.copy(newPos);
-}
-
-// For the lamp's vertical (y) motion only.
-function verletVerticalIntegration(object, acceleration, dt) {
-    if (object.userData.previousY === undefined) {
-        object.userData.previousY = object.position.y;
-    }
-    let currentY = object.position.y;
-    let newY = 2 * currentY - object.userData.previousY + acceleration * dt * dt;
-    object.userData.previousY = currentY;
-    object.position.y = newY;
-}
-
-// ----- Load the Lamp Model (OBJ + MTL) -----
-/*
-const mtlLoaderLamp = new MTLLoader();
-mtlLoaderLamp.setPath('assets/');
-mtlLoaderLamp.load('lamp.mtl', (materials) => {
-    materials.preload();
-    const objLoaderLamp = new OBJLoader();
-    objLoaderLamp.setMaterials(materials);
-    objLoaderLamp.setPath('assets/');
-    objLoaderLamp.load('lamp.obj',
-        (object) => {
-            object.position.set(0, 0, -10);
-            object.scale.set(3, 3, 3);
-            scene.add(object);
-            lamp = object;
-            // Initialize vertical integration state.
-            lamp.userData.previousY = lamp.position.y;
-            lampLight.position.set(0, 0.65, 0);
-            lamp.add(lampLight);
-            lampLight.target.position.set(0, -1, 10);
-            lamp.add(lampLight.target);
-        },
-        (xhr) => {
-            console.log((xhr.loaded / xhr.total * 100) + '% loaded for lamp');
-        },
-        (error) => {
-            console.error('Error loading lamp:', error);
+        if (key === 'p' && !pKeyPressed) {
+            // 'p' already toggles healthDecreasePaused (the pause state)
+            healthDecreasePaused = !healthDecreasePaused;
+            pKeyPressed = true;
+            console.log("Health decrease paused (pause state):", healthDecreasePaused);
         }
+    });
+    window.addEventListener('keyup', (event) => {
+        const key = event.key.toLowerCase();
+        keyStates[key] = false;
+        if (key === 'v') {
+            vKeyPressed = false;
+        }
+        if (key === 'p') {
+            pKeyPressed = false;
+        }
+    });
+    window.addEventListener('mousemove', (event) => {
+        // Only apply camera look if pointer lock is active AND we're not in intro
+        if (document.pointerLockElement === canvas && currentGameMode !== 'intro') {
+            const sensitivity = 0.002;
+            cameraRotationX += event.movementY * sensitivity;
+            cameraRotationY -= event.movementX * sensitivity;
+            // Clamp vertical rotation so the camera never flips over.
+            cameraRotationX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotationX));
+        }
+    });
+    window.addEventListener('wheel', (event) => {
+        if (currentGameMode !== 'intro') {
+            event.preventDefault();
+            cameraDistance += event.deltaY * 0.01;
+            cameraDistance = Math.max(5, Math.min(50, cameraDistance));
+        }
+    });
+
+    // Variables for jump physics.
+    let lampIsJumping = false;
+    const gravity = -9.8;
+    const jumpStrength = 6;
+
+    const clock = new THREE.Clock();
+
+    // ----- Three.js Scene Setup -----
+    const renderer = new Renderer();
+
+    const scene  = new Scene();
+    const camera = new Camera( 75.0 * Math.PI / 180.0 );
+    camera.transform.setPosition(0, 3, 5);
+    scene.camera = camera;
+
+    // Only request pointer lock if not in intro state
+    canvas.addEventListener('click', () => {
+        if (currentGameMode !== 'intro') {
+            canvas.requestPointerLock();
+        }
+    });
+
+
+
+    const letterMaterial = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 0.1, g_Metallic: 0.5 });
+    const lampMaterial   = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [1.0, 1.0, 1.0], g_Roughness: 0.1, g_Metallic: 0.5 });
+    const lampModel      = await load_gltf_model('lamp.glb');
+    const letterModels   = {
+      'p': await load_gltf_model('pixar_p.glb'),
+      'i': await load_gltf_model('pixar_i.glb'),
+      'x': await load_gltf_model('pixar_x.glb'),
+      'a': await load_gltf_model('pixar_a.glb'),
+      'r': await load_gltf_model('pixar_r.glb'),
+    }
+
+    const lamp = new Actor(lampModel, lampMaterial);
+    lamp.set_position_euler_scale(new Vector3(0, 0, -10), new Euler(0, -Math.PI / 2, 0, 'XYZ'), new Vector3(3, 3, 3));
+    scene.add(lamp);
+
+    scene.spot_light = new SpotLight(
+      new Vector3(),
+      new Vector3(),
+      new Vector3( 1, 1, 1 ),
+      10.0,
+      Math.PI / 9,
+      Math.PI / 6,
     );
-});
-*/
 
-const gltfLoaderLamp = new GLTFLoader();
-gltfLoaderLamp.setPath('assets/');
-gltfLoaderLamp.load('lamp.glb', (gltf) => {
-    const object = gltf.scene;
-    console.log(object);
+    const update_spot_light = () =>
+    {
+      const pos = ( new Vector4(0.0,  1.0,  0.5, 1.0) ).applyMatrix4( lamp.transform );
+      const dir = ( new Vector4(0.0, -0.5,  1.0, 0.0) ).applyMatrix4( lamp.transform );
+      scene.spot_light.position  = new Vector3(pos.x, pos.y, pos.z);
+      scene.spot_light.direction = new Vector3(dir.x, dir.y, dir.z).normalize();
+    }
 
-    object.position.set(0, 0, -10);
-    object.scale.set(3, 3, 3);
-    object.rotation.y = -Math.PI / 2;
-    scene.add(object);
-    lamp = object;
-    // Initialize vertical integration state.
-    lamp.userData.previousY = lamp.position.y;
-    lampLight.position.set(0, 0.65, 0);
-    lamp.add(lampLight);
-    lampLight.target.position.set(0, -1, 10);
-    lamp.add(lampLight.target);
-});
+    const staticLetters = [];
+    const fallingLetters = [];
 
-// ----- Helper Function to Load Static Letters -----
-function loadLetter(letter, posX, posY, posZ) {
-    const mtlLoader = new MTLLoader();
-    mtlLoader.setPath('assets/');
-    mtlLoader.load(`pixar_${letter}.mtl`, (materials) => {
-        materials.preload();
-        const objLoader = new OBJLoader();
-        objLoader.setMaterials(materials);
-        objLoader.setPath('assets/');
-        objLoader.load(`pixar_${letter}.obj`,
-            (object) => {
-                object.rotation.y = -Math.PI / 2;
-                object.position.set(posX, posY, posZ);
-                // Initialize previousPosition for Verlet integration.
-                object.userData.previousPosition = object.position.clone();
-                scene.add(object);
-                staticLetters.push(object);
-            },
-            (xhr) => {
-                console.log(`Letter ${letter}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
-            },
-            (error) => {
-                console.error(`Error loading letter ${letter}:`, error);
-            }
+    const spawnStaticLetters = () =>
+    {
+      const spawnStaticLetter = (letter, x, y, z) =>
+      {
+        const actor = new Letter(letterModels[letter], letterMaterial);
+        actor.set_position(new Vector3(x, y, z));
+        actor.set_euler(new Euler(0, -Math.PI / 2, 0, 'ZXY'));
+
+        scene.add(actor);
+        staticLetters.push(actor);
+      }
+
+      spawnStaticLetter('p', -8, 0, 0);
+      spawnStaticLetter('i', -4, 0, 0);
+      spawnStaticLetter('x',  0, 0, 0);
+      spawnStaticLetter('a',  4, 0, 0);
+      spawnStaticLetter('r',  8, 0, 0);
+    }
+
+    // ----- Ground -----
+    const ground = new Actor(
+        kGroundMesh,
+        new Material(
+            kShaders.PS_PBRMaterial,
+            { 
+                g_Diffuse: [ 0.403, 0.538, 1.768 ],
+                g_Roughness: 1.0,
+                g_Metallic: 0.1,
+            } 
+        )
+    );
+    scene.add(ground);
+
+    // ----- Lights -----
+    scene.directional_light = new DirectionalLight( new Vector3( -1, -1, -1 ), new Vector3( 1, 1, 1 ), 7 );
+
+
+    // ----- Custom OBB Functions -----
+    // Computes an oriented bounding box from an object.
+    function getOBB(object, collisionScale = 1) {
+        let aabb = new THREE.Box3(); // .setFromObject(object);
+        let center = new THREE.Vector3();
+        aabb.getCenter(center);
+        let size = new THREE.Vector3();
+        aabb.getSize(size);
+        let halfSizes = size.multiplyScalar(0.5).multiplyScalar(collisionScale);
+        let m = object.transform;
+        let axes = [
+            new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
+            new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).normalize(),
+            new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).normalize()
+        ];
+        return { center, axes, halfSizes };
+    }
+
+    function halfProjection(obb, axis) {
+        return obb.halfSizes.x * Math.abs(axis.dot(obb.axes[0])) +
+            obb.halfSizes.y * Math.abs(axis.dot(obb.axes[1])) +
+            obb.halfSizes.z * Math.abs(axis.dot(obb.axes[2]));
+    }
+
+    function obbIntersect(obb1, obb2) {
+        let axes = [];
+        axes.push(
+            obb1.axes[0], obb1.axes[1], obb1.axes[2],
+            obb2.axes[0], obb2.axes[1], obb2.axes[2]
         );
-    });
-}
-
-// Load Static Letters.
-loadLetter('p', -4, 0, 0);
-loadLetter('i', -2, 0, 0);
-loadLetter('x',  0, 0, 0);
-loadLetter('a',  2, 0, 0);
-loadLetter('r',  4, 0, 0);
-
-// ----- Dynamic Spawning of Falling Letters -----
-function loadFallingLetter(letter, posX, posY, posZ) {
-    const mtlLoader = new MTLLoader();
-    mtlLoader.setPath('assets/');
-    mtlLoader.load(`pixar_${letter}.mtl`, (materials) => {
-        materials.preload();
-        const objLoader = new OBJLoader();
-        objLoader.setMaterials(materials);
-        objLoader.setPath('assets/');
-        objLoader.load(`pixar_${letter}.obj`,
-            (object) => {
-                object.rotation.y = -Math.PI / 2;
-                object.position.set(posX, posY, posZ);
-                // Initialize previousPosition for Verlet integration.
-                object.userData.previousPosition = object.position.clone();
-                object.userData.squishing = false;
-                scene.add(object);
-                fallingLetters.push(object);
-            },
-            (xhr) => {
-                console.log(`Falling letter ${letter}: ${(xhr.loaded / xhr.total * 100).toFixed(2)}% loaded`);
-            },
-            (error) => {
-                console.error(`Error loading falling letter ${letter}:`, error);
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                let axis = new THREE.Vector3().crossVectors(obb1.axes[i], obb2.axes[j]);
+                if (axis.lengthSq() > 1e-6) {
+                    axis.normalize();
+                    axes.push(axis);
+                }
             }
-        );
-    });
-}
-
-function spawnFallingLetter() {
-    if (!gameStarted || gameOver) return;
-    const letters = ['p', 'i', 'x', 'a', 'r'];
-    const randomLetter = letters[Math.floor(Math.random() * letters.length)];
-    const posX = Math.random() * 20 - 10;
-    const posY = 20;
-    const posZ = Math.random() * 20 - 10;
-    loadFallingLetter(randomLetter, posX, posY, posZ);
-}
-
-// ----- Collision & Squish Animation Parameters -----
-const squishDuration = 0.5;
-const lampCollisionScale = 0.8;
-const letterCollisionScale = 0.9;
-
-// ---------- Game Over and Reset Functions ----------
-function displayGameOver() {
-    gameOver = true;
-    displayGameOverScreen(resetGame);
-}
-
-function startGame(mode = 'normal') {
-    currentGameMode = mode;
-    gameStarted = true;
-    gameOver = false;
-    health = mode === 'demo' ? 400 : 50;
-    score = 0;
-    startTime = performance.now();
-    letterSpawnTimer = 0;
-    currentSpawnInterval = 2;
-    if (startMenu) {
-        startMenu.style.display = 'none';
-    }
-}
-
-function resetGame() {
-    removeGameOverScreen();
-    gameStarted = false;
-    gameOver = false;
-    health = currentGameMode === 'demo' ? 400 : 50;
-    score = 0;
-    startTime = 0;
-    letterSpawnTimer = 0;
-    currentSpawnInterval = 2;
-    fallingLetters.forEach(letter => scene.remove(letter));
-    fallingLetters.length = 0;
-    if (lamp) {
-        lamp.position.set(0, 0, -10);
-        lamp.userData.previousY = lamp.position.y;
-    }
-    if (startMenu) {
-        startMenu.style.display = 'block';
-    }
-}
-
-// Expose startGame globally for UI access.
-window.startGame = startGame;
-
-// ----- Animation Loop -----
-function animate() {
-    const dt = clock.getDelta();
-
-    if (gameStarted && !gameOver) {
-        let elapsedTime = (performance.now() - startTime) / 1000;
-        let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
-        if (!healthDecreasePaused) {
-            // In demo mode, health decreases at half the rate.
-            let decreaseAmount = 10 * healthDecreaseRate * dt;
-            if (currentGameMode === 'demo') {
-                decreaseAmount *= 0.5;
+        }
+        let tVec = new THREE.Vector3().subVectors(obb2.center, obb1.center);
+        for (let i = 0; i < axes.length; i++) {
+            let axis = axes[i];
+            let r1 = halfProjection(obb1, axis);
+            let r2 = halfProjection(obb2, axis);
+            let t = Math.abs(tVec.dot(axis));
+            if (t > r1 + r2) {
+                return false;
             }
-            health -= decreaseAmount;
         }
-        if (health <= 0) {
-            health = 0;
-            displayGameOver();
+        return true;
+    }
+
+    // ----- OBB Helper Functions -----
+    // Compute the eight corners of an oriented bounding box.
+    function computeOBBCorners(obb) {
+        const { center, axes, halfSizes } = obb;
+        const corners = [];
+        for (let dx of [-1, 1]) {
+            for (let dy of [-1, 1]) {
+                for (let dz of [-1, 1]) {
+                    let corner = new THREE.Vector3().copy(center);
+                    corner.add(new THREE.Vector3().copy(axes[0]).multiplyScalar(dx * halfSizes.x));
+                    corner.add(new THREE.Vector3().copy(axes[1]).multiplyScalar(dy * halfSizes.y));
+                    corner.add(new THREE.Vector3().copy(axes[2]).multiplyScalar(dz * halfSizes.z));
+                    corners.push(corner);
+                }
+            }
         }
-        updateUI(health, score, elapsedTime);
-        ambientLight.intensity = (health / 100) * 0.5;
-        letterSpawnTimer += dt;
-        if (letterSpawnTimer >= currentSpawnInterval) {
-            spawnFallingLetter();
-            letterSpawnTimer = 0;
-            currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
+        return corners;
+    }
+
+    // Create a line-segment helper (wireframe) for the given OBB.
+    /*
+    function createOBBHelper(obb, color) {
+        const corners = computeOBBCorners(obb);
+        // Based on the order of the nested loops in computeOBBCorners,
+        // the indices are as follows:
+        // 0: (-1,-1,-1), 1: (-1,-1, 1), 2: (-1, 1,-1), 3: (-1, 1, 1),
+        // 4: ( 1,-1,-1), 5: ( 1,-1, 1), 6: ( 1, 1,-1), 7: ( 1, 1, 1)
+        const edges = [
+            [0,1],[1,3],[3,2],[2,0],  // bottom and top faces (for dx = -1)
+            [4,5],[5,7],[7,6],[6,4],  // bottom and top faces (for dx = 1)
+            [0,4],[1,5],[2,6],[3,7]   // connecting edges
+        ];
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(edges.length * 2 * 3);
+        let ptr = 0;
+        for (let edge of edges) {
+            const a = corners[edge[0]];
+            const b = corners[edge[1]];
+            positions[ptr++] = a.x;
+            positions[ptr++] = a.y;
+            positions[ptr++] = a.z;
+            positions[ptr++] = b.x;
+            positions[ptr++] = b.y;
+            positions[ptr++] = b.z;
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const material = new THREE.LineBasicMaterial({ color: color });
+        const lineSegments = new THREE.LineSegments(geometry, material);
+        return lineSegments;
+    }
+    */
+
+    // ----- Verlet Integration Helper Functions -----
+    function verletIntegration(object, acceleration, dt) {
+        const currentPos = object.get_position();
+        const newPos = currentPos.multiplyScalar(2)
+            .sub(object.get_prev_position())
+            .add(acceleration.clone().multiplyScalar(dt * dt));
+        object.set_position(newPos);
+    }
+
+/*
+    function verletVerticalIntegration(object, acceleration, dt) {
+        let currentY = object.get_position().y;
+        let newY = 2 * currentY - object.userData.previousY + acceleration * dt * dt;
+        object.userData.previousY = currentY;
+        object.position.y = newY;
+    }
+    */
+
+    // Initial load of static letters
+    spawnStaticLetters();
+
+    // ----- Dynamic Spawning of Falling Letters -----
+    const spawnFallingLetter = () =>
+    {
+        if (!gameStarted || gameOver) return;
+        const letters = ['p', 'i', 'x', 'a', 'r'];
+        const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+        const posX = Math.random() * 20 - 10;
+        const posY = 20;
+        const posZ = Math.random() * 20 - 10;
+
+        const actor = new Letter(letterModels[randomLetter], letterMaterial);
+        actor.set_position(new Vector3(posX, posY, posZ));
+        actor.set_euler(new Euler(0, -Math.PI / 2, 0, 'ZXY'));
+
+        scene.add(actor);
+        fallingLetters.push(actor);
+    }
+
+    // ----- Collision & Squish Animation Parameters -----
+    const squishDuration = 0.5;
+    const lampCollisionScale = 0.8;
+    const letterCollisionScale = 0.9;
+
+    // ---------- Game Over and Reset Functions ----------
+    function displayGameOver() {
+        gameOver = true;
+
+        // Exit pointer lock so the mouse is free
+        document.exitPointerLock();
+
+        displayGameOverScreen(resetGame);
+    }
+
+    function startGame(mode = 'normal') {
+        // When starting the game, switch from the intro state into either normal or demo mode.
+        currentGameMode = mode;  // mode is either 'normal' or 'demo'
+        gameStarted = true;
+        gameOver = false;
+        health = mode === 'demo' ? 400 : 50;
+        score = 0;
+        startTime = performance.now();
+        letterSpawnTimer = 0;
+        currentSpawnInterval = 2;
+        if (startMenu) {
+            startMenu.style.display = 'none';
         }
     }
 
-    if (lamp) {
-        // --- Horizontal Movement (x,z) ---
-        if (gameStarted) {
-            const speed = 0.15;
-            const forward = new THREE.Vector3();
-            camera.getWorldDirection(forward);
-            forward.y = 0;
-            forward.normalize();
-            const right = new THREE.Vector3();
-            right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
-            right.normalize();
-            let move = new THREE.Vector3();
-            if (keyStates['w']) move.add(forward);
-            if (keyStates['s']) move.sub(forward);
-            if (keyStates['a']) move.sub(right);
-            if (keyStates['d']) move.add(right);
-            if (move.length() > 0) {
-                move.normalize();
-                // Update only horizontal components.
-                lamp.position.x += move.x * speed;
-                lamp.position.z += move.z * speed;
+    function resetGame() {
+        // Exit pointer lock if it's active
+        document.exitPointerLock();
+
+        removeGameOverScreen();
+        gameStarted = false;
+        gameOver = false;
+        currentGameMode = 'intro';
+
+        // Reset health & stats for the "intro" state
+        health = 100;
+        score = 0;
+        startTime = 0;
+        letterSpawnTimer = 0;
+        currentSpawnInterval = 2;
+
+        // Immediately update UI so values reflect 100 health, 0 score/time
+        updateUI(health, score, 0);
+
+        // Restore ambient light to original intensity for the intro
+        // ambientLight.intensity = 1.5;
+
+        // Remove any falling letters from the scene
+        fallingLetters.forEach(letter => scene.remove(letter));
+        fallingLetters.length = 0;
+
+        // Remove static letters from the scene (in case they were squished)
+        staticLetters.forEach(letter => scene.remove(letter));
+        staticLetters.length = 0;
+
+        // Reload the static letters
+        spawnStaticLetters();
+
+        // Remove any leftover particle systems
+        activeParticles.forEach(ps => scene.remove(ps));
+        activeParticles.length = 0;
+
+        // Reset lamp to its original position/rotation
+        if (lamp) {
+            lamp.set_position(new Vector3(-3, 0, 5));
+            lamp.set_euler(new Euler(0, -Math.PI / 2, 0, 'ZXY'));
+            lampIsJumping = false;
+        }
+
+        // Show start menu again
+        if (startMenu) {
+            startMenu.style.display = 'block';
+        }
+    }
+
+    // Expose startGame globally for UI access.
+    window.startGame = startGame;
+
+    /**
+    * --------------------------------------------------------------------------
+    * PARTICLE SYSTEM IMPLEMENTATION (Smoke-like)
+    * --------------------------------------------------------------------------
+    */
+
+    const activeParticles = [];  // Store active particle systems
+
+    function spawnParticlesAt(position) {
+        const particleCount = 50;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const velocities = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount; i++) {
+            // Random initial positions (small spread)
+            const randX = (Math.random() - 0.5) * 0.5;
+            const randY = Math.random() * 0.5;
+            const randZ = (Math.random() - 0.5) * 0.5;
+            positions[i * 3]     = position.x + randX;
+            positions[i * 3 + 1] = position.y + randY;
+            positions[i * 3 + 2] = position.z + randZ;
+
+            // Slight drift velocities (to look like smoke rising / moving sideways)
+            const vx = (Math.random() - 0.5) * 0.3;
+            const vy = 0.2 + Math.random() * 0.4; // mostly upwards
+            const vz = (Math.random() - 0.5) * 0.3;
+            velocities[i * 3]     = vx;
+            velocities[i * 3 + 1] = vy;
+            velocities[i * 3 + 2] = vz;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+
+        const material = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 0.2,
+            transparent: true,
+            opacity: 1.0,
+            depthWrite: false  // helps blending for 'smoky' look
+        });
+
+        const points = new THREE.Points(geometry, material);
+        points.userData.startTime = performance.now();
+        points.userData.lastUpdateTime = performance.now();
+        points.userData.lifetime = 3000; // 3 seconds for a smoke-like fade
+
+        // scene.add(points);
+        activeParticles.push(points);
+    }
+
+    function updateParticles() {
+        const now = performance.now();
+        for (let i = activeParticles.length - 1; i >= 0; i--) {
+            const ps = activeParticles[i];
+            const elapsed = now - ps.userData.startTime;
+            const geometry = ps.geometry;
+            const positions = geometry.attributes.position.array;
+            const velocities = geometry.attributes.velocity.array;
+
+            // Time since last update
+            const frameDt = (now - ps.userData.lastUpdateTime) * 0.001; // convert ms to s
+            ps.userData.lastUpdateTime = now;
+
+            // Update each particle's position with velocity
+            for (let j = 0; j < positions.length; j += 3) {
+                positions[j]   += velocities[j]   * frameDt;
+                positions[j+1] += velocities[j+1] * frameDt;
+                positions[j+2] += velocities[j+2] * frameDt;
             }
-            // Trigger jump on input while moving.
-            if (keyStates[' '] && !lampIsJumping) {
+            geometry.attributes.position.needsUpdate = true;
+
+            // Fade out over lifetime
+            const ratio = elapsed / ps.userData.lifetime;
+            if (ratio >= 1) {
+                // Lifetime over
+                scene.remove(ps);
+                activeParticles.splice(i, 1);
+            } else {
+                ps.material.opacity = 1 - ratio;  // fade from 1 to 0
+            }
+        }
+    }
+    /**
+    * --------------------------------------------------------------------------
+    */
+
+    // ----- Animation Loop -----
+    function animate() {
+        const dt = clock.getDelta();
+
+        // In non-intro modes, update game logic.
+        if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
+            let elapsedTime = (performance.now() - startTime) / 1000;
+            let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
+            if (!healthDecreasePaused) {
+                let decreaseAmount = 10 * healthDecreaseRate * dt;
+                if (currentGameMode === 'demo') {
+                    decreaseAmount *= 0.5;
+                }
+                health -= decreaseAmount;
+            }
+            if (health <= 0) {
+                health = 0;
+                displayGameOver();
+            }
+            updateUI(health, score, elapsedTime);
+
+            // Dim ambient light as health decreases
+            // ambientLight.intensity = (health / 100) * 0.5;
+
+            // Spawn letters at intervals
+            letterSpawnTimer += dt;
+            if (letterSpawnTimer >= currentSpawnInterval) {
+                spawnFallingLetter();
+                letterSpawnTimer = 0;
+                // Speed up spawning as time progresses
+                currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
+            }
+        }
+
+        // ----- Lamp Movement, Jumping, and Rotation -----
+        if (lamp) {
+            if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
+                const speed = 0.15;
+                // Get forward/right vectors from camera (flattened on Y).
+                const forward = camera.get_forward();
+                forward.y = 0;
+                forward.normalize();
+
+                const right = new THREE.Vector3();
+                right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+                let move = new THREE.Vector3();
+                if (keyStates['w']) move.add(forward);
+                if (keyStates['s']) move.sub(forward);
+                if (keyStates['a']) move.sub(right);
+                if (keyStates['d']) move.add(right);
+
+                if (move.lengthSq() > 0) {
+                    move.normalize();
+                    const pos = lamp.get_position().addScaledVector(move, speed);
+                    lamp.set_position(pos);
+
+                    // --- Smooth Turning Implementation ---
+                    // Calculate the target angle from the movement vector.
+                    const targetAngle = Math.atan2(move.x, move.z);
+                    const rotationSpeed = 0.6; // Adjust for smoother turning.
+                    let angleDiff = targetAngle - lamp.get_euler().y;
+                    // Normalize angleDiff to [-π, π]
+                    angleDiff = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                    const rotation = lamp.get_euler();
+                    rotation.y += angleDiff * rotationSpeed;
+                    lamp.set_euler(rotation);
+                }
+
+                // Jump when space is pressed.
+                if (keyStates[' '] && !lampIsJumping) {
+                    lampIsJumping = true;
+                }
+            }
+            // In the intro state, auto-jump for idle animation.
+            if (currentGameMode === 'intro' && !lampIsJumping) {
                 lampIsJumping = true;
-                lampInitialY = lamp.position.y;
-                const dtApprox = 0.016;
-                lamp.userData.previousY = lamp.position.y - jumpStrength * dtApprox;
             }
-        }
 
-        // --- Auto-Jump on Start Screen ---
-        if (!gameStarted && !lampIsJumping) {
-            lampIsJumping = true;
-            lampInitialY = lamp.position.y;
-            const dtApprox = 0.016;
-            lamp.userData.previousY = lamp.position.y - jumpStrength * dtApprox;
-        }
+            // Process jumping
+            /*
+            if (lampIsJumping) {
+                verletVerticalIntegration(lamp, gravity, dt);
+                if (lamp.position.y < lampInitialY) {
+                    lamp.position.y = lampInitialY;
+                    lampIsJumping = false;
+                    lamp.userData.previousY = lampInitialY;
 
-        // --- Vertical (Jump) Integration ---
-        if (lampIsJumping) {
-            verletVerticalIntegration(lamp, gravity, dt);
-            if (lamp.position.y < lampInitialY) {
-                lamp.position.y = lampInitialY;
-                lampIsJumping = false;
-                lamp.userData.previousY = lampInitialY;
+                    // ---- Spawn Particles on Lamp Landing ----
+                    spawnParticlesAt(lamp.position.clone());
+                }
             }
-        }
+            */
 
-        // --- Update Lamp Rotation Based on Mouse Movement ---
-        // Offset by Math.PI to make the lamp face forward.
-        lamp.rotation.y = cameraRotationY + Math.PI;
+            // ----- Camera Setup -----
+            if (currentGameMode === 'intro') {
+                // Intro state: fixed camera position
+                camera.transform.setPosition(0, 2, 18);
+                camera.look_at(new Vector3(0, 0, 0));
+            } else if (firstPersonView) {
+                // First-person view: attach camera to lamp’s head.
+                const eyeOffset = new THREE.Vector3(0, 1, 0);
+                camera.transform.setPosition(lamp.get_position().add(eyeOffset));
+                const lookDirection = new THREE.Vector3(
+                    Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
+                    Math.sin(cameraRotationX),
+                    Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
+                );
+                camera.look_at(lamp.get_position().add(lookDirection));
+            } else {
+                // Third-person view: orbit camera around the lamp.
+                const offset = new THREE.Vector3(
+                    cameraDistance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
+                    cameraDistance * Math.sin(cameraRotationX) + 3,
+                    cameraDistance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
+                );
+                camera.transform.setPosition(lamp.get_position().add(offset));
+                camera.look_at(lamp.get_position());
+            }
 
-        // --- Camera Setup ---
-        if (firstPersonView) {
-            const eyeOffset = new THREE.Vector3(0, 1, 0);
-            camera.position.copy(lamp.position).add(eyeOffset);
-            const lookDirection = new THREE.Vector3(
-                Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
-                Math.sin(cameraRotationX),
-                Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
-            );
-            camera.lookAt(lamp.position.clone().add(lookDirection));
-        } else {
-            const offset = new THREE.Vector3(
-                cameraDistance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
-                cameraDistance * Math.sin(cameraRotationX) + 5,
-                cameraDistance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
-            );
-            camera.position.copy(lamp.position).add(offset);
-            camera.lookAt(lamp.position);
-        }
-
-        // --- Lamp-Letter Collisions ---
-        const lampOBB = getOBB(lamp, lampCollisionScale);
-        const allLetters = staticLetters.concat(fallingLetters);
-        for (let i = allLetters.length - 1; i >= 0; i--) {
-            const letter = allLetters[i];
-            const letterOBB = getOBB(letter, letterCollisionScale);
-            if (obbIntersect(lampOBB, letterOBB)) {
-                if (lamp.position.y > letter.position.y + 0.5) {
-                    if (!letter.userData.squishing) {
-                        letter.userData.squishing = true;
-                        letter.userData.squishElapsed = 0;
-                        letter.userData.squishDuration = squishDuration;
-                        letter.userData.originalScale = letter.scale.clone();
-                        score += 10;
-                        health = Math.min(100, health + 10);
-                    }
-                } else {
-                    let diff = new THREE.Vector3(lamp.position.x - letter.position.x, 0, lamp.position.z - letter.position.z);
-                    if (diff.length() > 0.001) {
-                        diff.normalize();
-                        let attempts = 0;
-                        while (obbIntersect(getOBB(lamp, lampCollisionScale), letterOBB) && attempts < 10) {
-                            lamp.position.x += diff.x * 0.05;
-                            lamp.position.z += diff.z * 0.05;
-                            attempts++;
+            // ----- Lamp-Letter Collision Handling -----
+            const lampOBB = getOBB(lamp, lampCollisionScale);
+            const allLetters = staticLetters.concat(fallingLetters);
+            for (let i = allLetters.length - 1; i >= 0; i--) {
+                const letter = allLetters[i];
+                const letterOBB = getOBB(letter, letterCollisionScale);
+                if (obbIntersect(lampOBB, letterOBB)) {
+                    // If the lamp is above the letter, initiate squish.
+                    if (lamp.get_position().y > letter.get_position().y + 0.5) {
+                        if (!letter.squishing) {
+                            letter.squishing = true;
+                            letter.squishElapsed = 0;
+                            letter.squishDuration = squishDuration;
+                            letter.originalScale = letter.get_scale();
+                            score += 10;
+                            health = Math.min(100, health + 10);
+                        }
+                    } else {
+                        // Otherwise, push them apart horizontally
+                        let diff = new THREE.Vector3(
+                            lamp.get_position().x - letter.get_position().x,
+                            0,
+                            lamp.get_position().z - letter.get_position().z
+                        );
+                        if (diff.length() > 0.001) {
+                            diff.normalize();
+                            let attempts = 0;
+                            while (
+                                obbIntersect(
+                                    getOBB(lamp, lampCollisionScale),
+                                    letterOBB
+                                ) &&
+                                attempts < 10
+                                ) {
+                                lamp.get_position().x += diff.x * 0.05;
+                                lamp.get_position().z += diff.z * 0.05;
+                                attempts++;
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    // --- Update Falling Letters with Full Verlet Integration ---
-    for (let i = fallingLetters.length - 1; i >= 0; i--) {
-        const letter = fallingLetters[i];
-        const gravityAcc = new THREE.Vector3(0, -9.8, 0);
-        verletIntegration(letter, gravityAcc, dt);
-        if (letter.position.y < 0) {
-            letter.position.y = 0;
-            if (letter.userData.previousPosition) {
-                letter.userData.previousPosition.y = 0;
+        // Update falling letters using Verlet integration, only if not grounded
+        for (let i = fallingLetters.length - 1; i >= 0; i--) {
+            const letter = fallingLetters[i];
+            const gravityAcc = new THREE.Vector3(0, -9.8, 0);
+            if (!letter.hasHitGround) {
+                verletIntegration(letter, gravityAcc, dt);
+            }
+
+            // Check if letter has just hit the ground
+            if (letter.get_position().y < 0 && !letter.hasHitGround) {
+                const pos = letter.get_position();
+                pos.y = 0.0;
+                letter.set_position(pos);
+                letter.hasHitGround = true;
+                // Spawn Particles once when a letter hits the ground
+                spawnParticlesAt(letter.get_position());
             }
         }
-    }
 
-    // --- Process Squishing Animations ---
-    const processSquish = (letterArray) => {
-        for (let i = letterArray.length - 1; i >= 0; i--) {
-            const letter = letterArray[i];
-            if (letter.userData.squishing) {
-                letter.userData.squishElapsed += dt;
-                let progress = letter.userData.squishElapsed / letter.userData.squishDuration;
-                if (progress > 1) progress = 1;
-                letter.scale.y = letter.userData.originalScale.y * (1 - 0.9 * progress);
-                if (progress >= 1) {
-                    scene.remove(letter);
-                    letterArray.splice(i, 1);
+        // Process squishing animations for both static and falling letters.
+        const processSquish = (letterArray) => {
+            for (let i = letterArray.length - 1; i >= 0; i--) {
+                const letter = letterArray[i];
+                if (letter.squishing) {
+                    letter.squishElapsed += dt;
+                    let progress = letter.squishElapsed / letter.squishDuration;
+                    if (progress > 1) progress = 1;
+                    letter.scale.y = letter.userData.originalScale.y * (1 - 0.9 * progress);
+                    if (progress >= 1) {
+                        scene.remove(letter);
+                        letterArray.splice(i, 1);
+                    }
                 }
             }
-        }
-    };
-    processSquish(staticLetters);
-    processSquish(fallingLetters);
+        };
+        processSquish(staticLetters);
+        processSquish(fallingLetters);
 
-    renderer.render(scene, camera);
+        // Update particle systems (fade out / remove)
+        updateParticles();
+
+        // -------- Bounding Box Visualization --------
+        // Draw the bounding boxes if the game is paused (via 'p') or if persistent mode is enabled (toggled via 'b').
+        /*
+        if (healthDecreasePaused && persistentBB) {
+            // Remove any existing helpers
+            boundingBoxHelpers.forEach(helper => scene.remove(helper));
+            boundingBoxHelpers = [];
+            // Create new helpers using our OBB (not the axis-aligned BoxHelper).
+            if (lamp) {
+                let obb = getOBB(lamp, lampCollisionScale);
+                let helper = createOBBHelper(obb, 0xff0000);
+                scene.add(helper);
+                boundingBoxHelpers.push(helper);
+            }
+            staticLetters.forEach(obj => {
+                let obb = getOBB(obj, letterCollisionScale);
+                let helper = createOBBHelper(obb, 0x00ff00);
+                scene.add(helper);
+                boundingBoxHelpers.push(helper);
+            });
+            fallingLetters.forEach(obj => {
+                let obb = getOBB(obj, letterCollisionScale);
+                let helper = createOBBHelper(obb, 0x0000ff);
+                scene.add(helper);
+                boundingBoxHelpers.push(helper);
+            });
+        } else {
+            boundingBoxHelpers.forEach(helper => scene.remove(helper));
+            boundingBoxHelpers = [];
+        }
+        */
+
+        update_spot_light();
+        renderer.submit(scene);
+    }
+
+
+    let last_time = 0.0;
+    const update = (time) => 
+    {
+        // In milliseconds
+        const dt = (time - last_time) / 1000.0;
+
+        requestAnimationFrame(update);
+        animate();
+    };
+
+    requestAnimationFrame(update)
 }
+
+
+main();

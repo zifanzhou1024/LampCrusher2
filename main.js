@@ -189,6 +189,7 @@ const update = (time) =>
   // In milliseconds
   const dt = (time - last_time) / 1000.0;
 
+  console.log( scene );
   renderer.submit( scene );
 
   requestAnimationFrame(update);
