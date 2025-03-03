@@ -605,7 +605,6 @@ async function main()
             if (currentGameMode === 'intro' && !lampIsJumping) {
                 lampIsJumping = true;
             }
-
             // Process jumping
             /*
             if (lampIsJumping) {
@@ -708,6 +707,9 @@ async function main()
                 // Spawn Particles once when a letter hits the ground
                 spawnParticlesAt(letter.get_position());
             }
+            letter.userData.hasHitGround = true;
+            // Spawn Particles once when a letter hits the ground
+            spawnParticlesAt(letter.position.clone());
         }
 
         // Process squishing animations for both static and falling letters.

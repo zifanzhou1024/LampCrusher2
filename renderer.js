@@ -308,7 +308,7 @@ export const kCubeMesh = new GpuMesh(
 export function load_gltf_model( asset )
 {
   const loader = new GLTFLoader();
-  loader.setPath( 'public/assets/' );
+  loader.setPath( '/assets/' );
   return new Promise( ( resolve, reject ) =>
   {
     loader.load( asset, ( gltf ) =>
