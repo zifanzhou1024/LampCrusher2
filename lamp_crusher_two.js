@@ -2,6 +2,7 @@
 import { GpuDevice, GpuMesh, gl } from "./gpu.js"
 import { kShaders } from "./shaders.js"
 import { Actor, Scene, Camera, Material, Renderer, DirectionalLight, SpotLight, kGroundMesh, kCubeMesh, load_gltf_model } from './renderer.js'
+import { PhysicsEngine } from "./physics_engine.js";
 
 import * as THREE from 'three';
 import { Vector2, Vector3, Vector4, Matrix4, Euler } from 'three';
@@ -14,7 +15,7 @@ class Letter extends Actor
 {
     constructor(model, material)
     {
-        super(model, material);
+        super(model, material, 0.5);
         this.squishing = false;
         this.squishElapsed = 0.0;
         this.squishDuration = 0.0;
@@ -120,12 +121,13 @@ async function main()
     // Variables for jump physics.
     let lampIsJumping = false;
     const gravity = -9.8;
-    const jumpStrength = 6;
+    const jumpStrength = 300;
 
     const clock = new THREE.Clock();
 
     // ----- Three.js Scene Setup -----
     const renderer = new Renderer();
+    const physics  = new PhysicsEngine();
 
     const scene  = new Scene();
     const camera = new Camera( 75.0 * Math.PI / 180.0 );
@@ -152,7 +154,7 @@ async function main()
       'r': await load_gltf_model('pixar_r.glb'),
     }
 
-    const lamp = new Actor(lampModel, lampMaterial);
+    const lamp = new Actor(lampModel, lampMaterial, 0.2);
     lamp.set_position_euler_scale(new Vector3(0, 0, -10), new Euler(0, -Math.PI / 2, 0, 'XYZ'), new Vector3(3, 3, 3));
     scene.add(lamp);
 
@@ -205,7 +207,8 @@ async function main()
                 g_Roughness: 1.0,
                 g_Metallic: 0.1,
             } 
-        )
+        ),
+        0.0
     );
     scene.add(ground);
 
@@ -528,7 +531,7 @@ async function main()
     */
 
     // ----- Animation Loop -----
-    function animate() {
+    function animate(time) {
         const dt = clock.getDelta();
 
         // In non-intro modes, update game logic.
@@ -599,13 +602,20 @@ async function main()
                 // Jump when space is pressed.
                 if (keyStates[' '] && !lampIsJumping) {
                     lampIsJumping = true;
+                    lamp.add_force(new Vector3(0.0, jumpStrength, 0.0));
                 }
             }
             // In the intro state, auto-jump for idle animation.
             if (currentGameMode === 'intro' && !lampIsJumping) {
                 lampIsJumping = true;
+                lamp.add_force(new Vector3(0.0, jumpStrength, 0.0));
             }
             // Process jumping
+            if (lampIsJumping) {
+                if (lamp.is_grounded()) {
+                    lampIsJumping = false;
+                }
+            }
             /*
             if (lampIsJumping) {
                 verletVerticalIntegration(lamp, gravity, dt);
@@ -652,7 +662,7 @@ async function main()
             for (let i = allLetters.length - 1; i >= 0; i--) {
                 const letter = allLetters[i];
                 const letterOBB = getOBB(letter, letterCollisionScale);
-                if (obbIntersect(lampOBB, letterOBB)) {
+                if (0 && obbIntersect(lampOBB, letterOBB)) {
                     // If the lamp is above the letter, initiate squish.
                     if (lamp.get_position().y > letter.get_position().y + 0.5) {
                         if (!letter.squishing) {
@@ -691,6 +701,7 @@ async function main()
         }
 
         // Update falling letters using Verlet integration, only if not grounded
+        /*
         for (let i = fallingLetters.length - 1; i >= 0; i--) {
             const letter = fallingLetters[i];
             const gravityAcc = new THREE.Vector3(0, -9.8, 0);
@@ -711,6 +722,7 @@ async function main()
             // Spawn Particles once when a letter hits the ground
             spawnParticlesAt(letter.position.clone());
         }
+        */
 
         // Process squishing animations for both static and falling letters.
         const processSquish = (letterArray) => {
@@ -720,7 +732,7 @@ async function main()
                     letter.squishElapsed += dt;
                     let progress = letter.squishElapsed / letter.squishDuration;
                     if (progress > 1) progress = 1;
-                    letter.scale.y = letter.userData.originalScale.y * (1 - 0.9 * progress);
+                    letter.get_scale().y = letter.originalScale.y * (1 - 0.9 * progress);
                     if (progress >= 1) {
                         scene.remove(letter);
                         letterArray.splice(i, 1);
@@ -767,18 +779,15 @@ async function main()
         */
 
         update_spot_light();
+        physics.fixed_update( scene, time );
         renderer.submit(scene);
     }
 
 
-    let last_time = 0.0;
     const update = (time) => 
     {
-        // In milliseconds
-        const dt = (time - last_time) / 1000.0;
-
         requestAnimationFrame(update);
-        animate();
+        animate(time / 1000.0);
     };
 
     requestAnimationFrame(update)

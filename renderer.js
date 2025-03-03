@@ -52,14 +52,16 @@ const perspective_matrix_rh = ( fov, aspect, near, far ) =>
 
 export class Actor
 {
-  constructor( mesh, material )
+  constructor( mesh, material, mass )
   {
     this.transform      = new Matrix4();
-    this.prev_transform = new Matrix4();
+    this.prev_transform = null;
+    this.velocity       = new Vector3( 0.0, 0.0, 0.0 );
     this.mesh           = mesh;
     this.material       = material;
     this.bounding_box   = null;
     this.force          = new Vector3( 0.0, 0.0, 0.0 );
+    this.mass           = mass;
   }
 
   set_position_euler_scale( position, euler, scale )
@@ -94,16 +96,36 @@ export class Actor
 
   add_force( force )
   {
-    this.force.add( force );
+    this.force.add( force.clone().multiplyScalar( 1.0 / 0.08 ) );
+  }
+
+  get_force()
+  {
+    return this.force.clone();
+  }
+
+  get_velocity()
+  {
+    return this.velocity.clone();
   }
 
   get_position()
   {
     return ( new Vector3() ).setFromMatrixPosition( this.transform );
   }
+  
+  is_grounded()
+  {
+    return this.get_position().y < 0.01;
+  }
 
   get_prev_position()
   {
+    if ( !this.prev_transform )
+    {
+      return get_position();
+    }
+
     return ( new Vector3() ).setFromMatrixPosition( this.prev_transform );
   }
 
@@ -225,6 +247,7 @@ export class Scene
 
   remove( actor )
   {
+    this.actors.delete( actor.id );
     actor.id = 0;
   }
 }
@@ -754,10 +777,6 @@ export class Renderer
         {
           return;
         }
-        if ( !actor.prev_transform )
-        {
-          actor.prev_transform = actor.transform;
-        }
       
         actor.material.bind(
           {
@@ -774,7 +793,6 @@ export class Renderer
         {
           console.error( "WebGL error: " + error );
         }
-        actor.prev_transform = actor.transform;
       }
     );
   }
@@ -963,6 +981,15 @@ export class Renderer
 
   submit( scene )
   {
+    scene.actors.forEach( 
+      ( actor ) =>
+      {
+        if ( !actor.prev_transform )
+        {
+          actor.prev_transform = actor.transform.clone();
+        }
+      }
+    );
 
     if ( this.enable_taa )
     {
@@ -998,6 +1025,13 @@ export class Renderer
 
     this.prev_view      = this.view.clone();
     this.prev_view_proj = this.view_proj.clone();
+
+    scene.actors.forEach( 
+      ( actor ) =>
+      {
+        actor.prev_transform = actor.transform.clone();
+      }
+    );
 
     this.frame_id++;
   }
