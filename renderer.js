@@ -458,9 +458,12 @@ export class Material
 
 function orthographic_proj( left, right, bottom, top, near, far )
 {
-  return (new Matrix4).makeScale(1 / (right - left), 1 / (top - bottom), 1 / (far - near))
+/*
+  return (new Matrix4()).makeScale(1 / (right - left), 1 / (top - bottom), 1 / (far - near))
       .multiply((new Matrix4).makeTranslation(-left - right, -top - bottom, -near - far))
       .multiply((new Matrix4).makeScale(2, 2, -2));
+      */
+  return new Matrix4().makeOrthographic( left, right, top, bottom, near, far );
 }
 
 class DebugCubeDrawCmd
@@ -886,6 +889,7 @@ export class Renderer
   {
     gl.bindFramebuffer( gl.FRAMEBUFFER, this.directional_shadow_map );
     gl.viewport( 0, 0, kShadowMapSize, kShadowMapSize );
+    gl.clearDepth( 1.0 );
     gl.clear( gl.DEPTH_BUFFER_BIT );
     gl.depthFunc( gl.LESS );
 
@@ -893,11 +897,13 @@ export class Renderer
       return;
 
 
-    const camera_center      = (new Vector3( 0, 0, -40 )).applyMatrix4(scene.camera.transform);
-    const center_of_interest = camera_center.add( scene.directional_light.direction.clone().multiplyScalar( -40.0 ) );
+    const target = new Vector3( 0.0, 0.0, 0.0 );
+    const camera = target.clone().sub( scene.directional_light.direction.clone().normalize().multiplyScalar( 40.0 ) );
+    this.draw_debug_cube( new Matrix4().setPosition( camera ), new Vector4( 0.0, 0.0, 1.0, 1.0 ) );
+    this.draw_debug_cube( new Matrix4().setPosition( target ), new Vector4( 0.0, 0.0, 1.0, 1.0 ) );
 
     this.directional_light_proj      = orthographic_proj( -35, 35, -35, 35, 0.1, 75 );
-    this.directional_light_view      = (new Matrix4).lookAt( camera_center, center_of_interest, new Vector3( 0, 0, 1 ) );
+    this.directional_light_view      = (new Matrix4()).lookAt( camera, target, new Vector3( 0, 0, 1 ) ).setPosition( camera ).invert();
     this.directional_light_view_proj = (new Matrix4()).multiplyMatrices( this.directional_light_proj, this.directional_light_view );
 
     scene.actors.forEach(
@@ -910,11 +916,13 @@ export class Renderer
 
         actor.material.bind(
           {
-            g_Model:    actor.transform.elements,
-            g_ViewProj: this.directional_light_view_proj.elements,
+            g_Model:        actor.transform.elements,
+            g_ViewProj:     this.directional_light_view_proj.elements,
+            g_PrevViewProj: this.directional_light_view_proj.elements,
+            g_TAAJitter:    [0, 0, 0],
           }
         )
-        actor.mesh.draw();
+        actor.mesh.draw( 'g_Model', actor.transform, 'g_PrevModel', actor.prev_transform );
       }
     );
   }

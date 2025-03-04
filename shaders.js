@@ -365,7 +365,7 @@ export const kShaders = {
           diffuse
         );
 
-        vec3 irradiance = directional + spot_light; //  * ( 1.0 - shadow ) ;
+        vec3 irradiance = directional * ( 1.0 - shadow ) + spot_light;
 
         gl_FragColor    =  depth == 0.0 ? vec4( g_SkyColor, 1.0 ) : vec4( irradiance, 1.0 );
       }`,

@@ -91,6 +91,7 @@ export class GpuGraphicsPSO
     this.fragment_shader = fragment_shader;
     this.pso             = gl.createProgram();
     this.uniforms        = uniforms;
+    this.uniform_cache   = new Map();
     gl.attachShader(this.pso, this.vertex_shader.shader);
     gl.attachShader(this.pso, this.fragment_shader.shader);
 
@@ -130,7 +131,15 @@ export class GpuGraphicsPSO
 
   set_uniform(name, value)
   {
-    const location = gl.getUniformLocation(this.pso, name);
+    let location = null;
+    if ( this.uniform_cache.get( name ) )
+    {
+      location = this.uniform_cache.get( name );
+    }
+    else
+    {
+      location = gl.getUniformLocation(this.pso, name);
+    }
 
     if (!location)
     {

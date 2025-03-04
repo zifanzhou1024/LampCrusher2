@@ -68,6 +68,15 @@ async function main()
     let cameraRotationY = 0;
     let cameraDistance = 15;
 
+    // ----- Three.js Scene Setup -----
+    const renderer = new Renderer();
+    const physics  = new PhysicsEngine();
+
+    const scene  = new Scene();
+    const camera = new Camera( 75.0 * Math.PI / 180.0 );
+    camera.transform.setPosition(0, 3, 5);
+    scene.camera = camera;
+
     // ---------- Event Listeners --------------
     window.addEventListener('keydown', (event) => {
         const key = event.key.toLowerCase();
@@ -88,6 +97,10 @@ async function main()
             healthDecreasePaused = !healthDecreasePaused;
             pKeyPressed = true;
             console.log("Health decrease paused (pause state):", healthDecreasePaused);
+        }
+
+        if (key === '`') {
+            renderer.cycle_blit_buffer();
         }
     });
     window.addEventListener('keyup', (event) => {
@@ -124,15 +137,6 @@ async function main()
     const jumpStrength = 300;
 
     const clock = new THREE.Clock();
-
-    // ----- Three.js Scene Setup -----
-    const renderer = new Renderer();
-    const physics  = new PhysicsEngine();
-
-    const scene  = new Scene();
-    const camera = new Camera( 75.0 * Math.PI / 180.0 );
-    camera.transform.setPosition(0, 3, 5);
-    scene.camera = camera;
 
     // Only request pointer lock if not in intro state
     canvas.addEventListener('click', () => {
@@ -210,6 +214,7 @@ async function main()
         ),
         0.0
     );
+    ground.mesh.name = "Ground";
     scene.add(ground);
 
     // ----- Lights -----
