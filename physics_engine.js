@@ -6,7 +6,7 @@ export class PhysicsEngine
 {
   constructor(  )
   {
-    this.ground_friction_constant = 0.1;
+    this.ground_friction_constant = 0.99;
     this.time                     = 0.0;
   }
 

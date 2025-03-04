@@ -62,6 +62,7 @@ export class Actor
     this.bounding_box   = null;
     this.force          = new Vector3( 0.0, 0.0, 0.0 );
     this.mass           = mass;
+    this.aabb           = this.mesh.aabb;
   }
 
   set_position_euler_scale( position, euler, scale )
@@ -177,14 +178,36 @@ export class Model
   {
     this.name    = name;
     this.subsets = model_subsets;
-    this.aabb    = new Box3();
+
+    let min = new Vector3(  Infinity,  Infinity,  Infinity );
+    let max = new Vector3( -Infinity, -Infinity, -Infinity );
+    for ( let isubset = 0; isubset < this.subsets.length; isubset++ )
+    {
+      const subset = this.subsets[ isubset ];
+      for ( let ivertex = 0; ivertex < subset.gpu_mesh.vertices.length; ivertex += ( 3 + 3 + 2 ) )
+      {
+        const x = subset.gpu_mesh.vertices[ ivertex + 0 ];
+        const y = subset.gpu_mesh.vertices[ ivertex + 1 ];
+        const z = subset.gpu_mesh.vertices[ ivertex + 2 ];
+        const pos = new Vector3( x, y, z ).applyMatrix4( subset.transform );
+        
+        min.x   = Math.min( min.x, pos.x );
+        min.y   = Math.min( min.y, pos.y );
+        min.z   = Math.min( min.z, pos.z );
+        max.x   = Math.max( max.x, pos.x );
+        max.y   = Math.max( max.y, pos.y );
+        max.z   = Math.max( max.z, pos.z );
+      }
+    }
+
+    this.aabb    = new Box3( min, max );
   }
 
   draw( model_uniform, model, prev_model_uniform, prev_model )
   {
-    for (let i = 0; i < this.subsets.length; i++)
+    for ( let i = 0; i < this.subsets.length; i++ )
     {
-      const subset = this.subsets[i];
+      const subset = this.subsets[ i ];
       subset.draw( model_uniform, model, prev_model_uniform, prev_model );
     }
   }
@@ -440,6 +463,64 @@ function orthographic_proj( left, right, bottom, top, near, far )
       .multiply((new Matrix4).makeScale(2, 2, -2));
 }
 
+class DebugCubeDrawCmd
+{
+  constructor( transform, color )
+  {
+    this.transform = transform;
+    this.color     = color;
+  }
+}
+
+class DebugCube
+{
+  constructor()
+  {
+    this.pso = new GpuGraphicsPSO(
+      new GpuVertexShader(kShaders.VS_Debug),
+      new GpuFragmentShader(kShaders.PS_Debug),
+    );
+
+    this.vertices = new Float32Array([
+      -0.5, -0.5, -0.5,  0.5, -0.5, -0.5,  // Edge 1
+       0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  // Edge 2
+       0.5,  0.5, -0.5, -0.5,  0.5, -0.5,  // Edge 3
+      -0.5,  0.5, -0.5, -0.5, -0.5, -0.5,  // Edge 4
+      
+      -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  // Edge 5
+       0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  // Edge 6
+       0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  // Edge 7
+      -0.5,  0.5,  0.5, -0.5, -0.5,  0.5,  // Edge 8
+
+      -0.5, -0.5, -0.5, -0.5, -0.5,  0.5,  // Edge 9
+       0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  // Edge 10
+       0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  // Edge 11
+      -0.5,  0.5, -0.5, -0.5,  0.5,  0.5   // Edge 12
+    ]);
+
+    this.vertex_buffer = gl.createBuffer();
+    gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
+    gl.bufferData( gl.ARRAY_BUFFER, this.vertices, gl.STATIC_DRAW );
+  }
+
+  draw( cmd, view_proj )
+  {
+    this.pso.bind(
+      {
+        g_Model: cmd.transform.elements,
+        g_ViewProj: view_proj.elements,
+        g_Color: cmd.color.toArray()
+      }
+    );
+
+    gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
+    gl.enableVertexAttribArray( 0 );
+    gl.vertexAttribPointer( 0, 3, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0 );
+
+    gl.drawArrays( gl.LINES, 0, this.vertices.length / 3 );
+  }
+}
+
 export class Renderer 
 {
   constructor()
@@ -520,6 +601,9 @@ export class Renderer
     this.frame_id        = 0;
     this.enable_taa      = false;
     this.enable_pcf      = true;
+
+    this.debug_cube           = new DebugCube();
+    this.debug_cube_draw_list = [];
   }
 
   get_taa_jitter()
@@ -979,6 +1063,36 @@ export class Renderer
     this.quad.draw();
   }
 
+  render_handler_debug()
+  {
+    gl.bindFramebuffer( gl.FRAMEBUFFER, null );
+    gl.viewport( 0, 0, gl.canvas.width, gl.canvas.height );
+    gl.depthFunc( gl.ALWAYS );
+
+    for ( let i = 0; i < this.debug_cube_draw_list.length; i++ )
+    {
+      this.debug_cube.draw( this.debug_cube_draw_list[ i ], this.view_proj );
+    }
+    this.debug_cube_draw_list = [];
+  }
+
+  draw_debug_cube( transform, color )
+  {
+    this.debug_cube_draw_list.push( new DebugCubeDrawCmd( transform, color ) );
+  }
+
+  draw_obb( transform, aabb, color )
+  {
+    const size   = aabb.max.clone().sub( aabb.min );
+    const center = aabb.max.clone().add( aabb.min ).multiplyScalar( 0.5 );
+
+    const translation_matrix = new Matrix4().setPosition( center.x, center.y, center.z );
+    const scale_matrix       = new Matrix4().makeScale( size.x, size.y, size.z );
+    
+    const cube_transform = new Matrix4().multiply( transform ).multiply( translation_matrix ).multiply( scale_matrix );
+    this.draw_debug_cube( cube_transform, color );
+  }
+
   submit( scene )
   {
     scene.actors.forEach( 
@@ -1022,6 +1136,7 @@ export class Renderer
     this.render_handler_post_processing();
 
     this.render_handler_blit();
+    this.render_handler_debug();
 
     this.prev_view      = this.view.clone();
     this.prev_view_proj = this.view_proj.clone();

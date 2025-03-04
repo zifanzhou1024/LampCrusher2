@@ -320,24 +320,6 @@ async function main()
     }
     */
 
-    // ----- Verlet Integration Helper Functions -----
-    function verletIntegration(object, acceleration, dt) {
-        const currentPos = object.get_position();
-        const newPos = currentPos.multiplyScalar(2)
-            .sub(object.get_prev_position())
-            .add(acceleration.clone().multiplyScalar(dt * dt));
-        object.set_position(newPos);
-    }
-
-/*
-    function verletVerticalIntegration(object, acceleration, dt) {
-        let currentY = object.get_position().y;
-        let newY = 2 * currentY - object.userData.previousY + acceleration * dt * dt;
-        object.userData.previousY = currentY;
-        object.position.y = newY;
-    }
-    */
-
     // Initial load of static letters
     spawnStaticLetters();
 
@@ -616,19 +598,6 @@ async function main()
                     lampIsJumping = false;
                 }
             }
-            /*
-            if (lampIsJumping) {
-                verletVerticalIntegration(lamp, gravity, dt);
-                if (lamp.position.y < lampInitialY) {
-                    lamp.position.y = lampInitialY;
-                    lampIsJumping = false;
-                    lamp.userData.previousY = lampInitialY;
-
-                    // ---- Spawn Particles on Lamp Landing ----
-                    spawnParticlesAt(lamp.position.clone());
-                }
-            }
-            */
 
             // ----- Camera Setup -----
             if (currentGameMode === 'intro') {
@@ -700,30 +669,6 @@ async function main()
             }
         }
 
-        // Update falling letters using Verlet integration, only if not grounded
-        /*
-        for (let i = fallingLetters.length - 1; i >= 0; i--) {
-            const letter = fallingLetters[i];
-            const gravityAcc = new THREE.Vector3(0, -9.8, 0);
-            if (!letter.hasHitGround) {
-                verletIntegration(letter, gravityAcc, dt);
-            }
-
-            // Check if letter has just hit the ground
-            if (letter.get_position().y < 0 && !letter.hasHitGround) {
-                const pos = letter.get_position();
-                pos.y = 0.0;
-                letter.set_position(pos);
-                letter.hasHitGround = true;
-                // Spawn Particles once when a letter hits the ground
-                spawnParticlesAt(letter.get_position());
-            }
-            letter.userData.hasHitGround = true;
-            // Spawn Particles once when a letter hits the ground
-            spawnParticlesAt(letter.position.clone());
-        }
-        */
-
         // Process squishing animations for both static and falling letters.
         const processSquish = (letterArray) => {
             for (let i = letterArray.length - 1; i >= 0; i--) {
@@ -745,6 +690,7 @@ async function main()
 
         // Update particle systems (fade out / remove)
         updateParticles();
+        physics.fixed_update( scene, time );
 
         // -------- Bounding Box Visualization --------
         // Draw the bounding boxes if the game is paused (via 'p') or if persistent mode is enabled (toggled via 'b').
@@ -779,7 +725,10 @@ async function main()
         */
 
         update_spot_light();
-        physics.fixed_update( scene, time );
+
+        renderer.draw_obb( lamp.transform, lamp.aabb, new Vector4( 1.0, 0.0, 0.0, 1.0 ) );
+        staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
+        fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
         renderer.submit(scene);
     }
 

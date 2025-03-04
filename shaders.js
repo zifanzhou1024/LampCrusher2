@@ -523,4 +523,28 @@ export const kShaders = {
 
       gl_FragColor = vec4( gamma_compressed, 1.0 );
     }`,
+
+  'VS_Debug': `
+    attribute vec3 position;
+    uniform mat4 g_Model;
+    uniform mat4 g_ViewProj;
+
+    void main()
+    {
+      vec4 ws_pos  = g_Model    * vec4( position, 1.0 );
+      vec4 ndc_pos = g_ViewProj * ws_pos;
+      gl_Position  = ndc_pos;
+    }
+  `,
+
+  'PS_Debug': `
+    precision mediump float;
+
+    uniform vec4 g_Color;
+
+    void main()
+    {
+      gl_FragColor = g_Color;
+    }
+  `,
 }
