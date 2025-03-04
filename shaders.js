@@ -547,4 +547,34 @@ export const kShaders = {
       gl_FragColor = g_Color;
     }
   `,
+
+  'VS_DebugVertexColor': `
+    attribute vec3 position;
+    attribute vec3 color;
+
+    uniform mat4 g_Model;
+    uniform mat4 g_ViewProj;
+
+    varying vec3 f_Color;
+
+    void main()
+    {
+      vec4 ws_pos  = g_Model    * vec4( position, 1.0 );
+      vec4 ndc_pos = g_ViewProj * ws_pos;
+
+      f_Color      = color;
+      gl_Position  = ndc_pos;
+    }
+  `,
+
+  'PS_DebugVertexColor': `
+    precision mediump float;
+
+    varying vec3 f_Color;
+
+    void main()
+    {
+      gl_FragColor = vec4( f_Color, 1.0 );
+    }
+  `,
 }

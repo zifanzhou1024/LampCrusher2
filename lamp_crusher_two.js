@@ -734,6 +734,9 @@ async function main()
         renderer.draw_obb( lamp.transform, lamp.aabb, new Vector4( 1.0, 0.0, 0.0, 1.0 ) );
         staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
         fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
+        renderer.draw_debug_axes( new Matrix4() );
+        renderer.draw_debug_axes( lamp.transform );
+
         renderer.submit(scene);
     }
 

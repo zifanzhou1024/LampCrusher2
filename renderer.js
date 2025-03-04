@@ -475,6 +475,14 @@ class DebugCubeDrawCmd
   }
 }
 
+class DebugAxesDrawCmd
+{
+  constructor( transform )
+  {
+    this.transform = transform;
+  }
+}
+
 class DebugCube
 {
   constructor()
@@ -519,6 +527,47 @@ class DebugCube
     gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
     gl.enableVertexAttribArray( 0 );
     gl.vertexAttribPointer( 0, 3, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0 );
+
+    gl.drawArrays( gl.LINES, 0, this.vertices.length / 3 );
+  }
+}
+
+class DebugAxes
+{
+  constructor()
+  {
+    this.pso = new GpuGraphicsPSO(
+      new GpuVertexShader(kShaders.VS_DebugVertexColor),
+      new GpuFragmentShader(kShaders.PS_DebugVertexColor),
+    );
+
+    this.vertices = new Float32Array([
+      // Position     Color           Position       Color
+      0.0, 0.0, 0.0,  1.0, 0.0, 0.0,  1.0, 0.0, 0.0,  1.0, 0.0, 0.0,   // X
+      0.0, 0.0, 0.0,  0.0, 1.0, 0.0,  0.0, 1.0, 0.0,  0.0, 1.0, 0.0,   // Y
+      0.0, 0.0, 0.0,  0.0, 0.0, 1.0,  0.0, 0.0, 1.0,  0.0, 0.0, 1.0,   // Z
+    ]);
+
+    this.vertex_buffer = gl.createBuffer();
+    gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
+    gl.bufferData( gl.ARRAY_BUFFER, this.vertices, gl.STATIC_DRAW );
+  }
+
+  draw( cmd, view_proj )
+  {
+    this.pso.bind(
+      {
+        g_Model: cmd.transform.elements,
+        g_ViewProj: view_proj.elements,
+      }
+    );
+
+    gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
+    gl.enableVertexAttribArray( 0 );
+    gl.vertexAttribPointer( 0, 3, gl.FLOAT, false, 6 * Float32Array.BYTES_PER_ELEMENT, 0 );
+
+    gl.enableVertexAttribArray( 1 );
+    gl.vertexAttribPointer( 1, 3, gl.FLOAT, false, 6 * Float32Array.BYTES_PER_ELEMENT, 3 * Float32Array.BYTES_PER_ELEMENT );
 
     gl.drawArrays( gl.LINES, 0, this.vertices.length / 3 );
   }
@@ -606,7 +655,9 @@ export class Renderer
     this.enable_pcf      = true;
 
     this.debug_cube           = new DebugCube();
+    this.debug_axes           = new DebugAxes();
     this.debug_cube_draw_list = [];
+    this.debug_axes_draw_list = [];
   }
 
   get_taa_jitter()
@@ -1079,12 +1130,24 @@ export class Renderer
     {
       this.debug_cube.draw( this.debug_cube_draw_list[ i ], this.view_proj );
     }
+
+    for ( let i = 0; i < this.debug_axes_draw_list.length; i++ )
+    {
+      this.debug_axes.draw( this.debug_axes_draw_list[ i ], this.view_proj );
+    }
+
     this.debug_cube_draw_list = [];
+    this.debug_axes_draw_list = [];
   }
 
   draw_debug_cube( transform, color )
   {
     this.debug_cube_draw_list.push( new DebugCubeDrawCmd( transform, color ) );
+  }
+
+  draw_debug_axes( transform )
+  {
+    this.debug_axes_draw_list.push( new DebugAxesDrawCmd( transform ) );
   }
 
   draw_obb( transform, aabb, color )
