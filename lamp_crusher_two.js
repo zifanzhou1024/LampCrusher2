@@ -219,7 +219,7 @@ async function main()
     // ----- Custom OBB Functions -----
     // Computes an oriented bounding box from an object.
     function getOBB(object, collisionScale = 1) {
-        let aabb = new THREE.Box3(); // .setFromObject(object);
+        let aabb = object.aabb;
         let center = new THREE.Vector3();
         aabb.getCenter(center);
         let size = new THREE.Vector3();
@@ -631,7 +631,7 @@ async function main()
             for (let i = allLetters.length - 1; i >= 0; i--) {
                 const letter = allLetters[i];
                 const letterOBB = getOBB(letter, letterCollisionScale);
-                if (0 && obbIntersect(lampOBB, letterOBB)) {
+                if (obbIntersect(lampOBB, letterOBB)) {
                     // If the lamp is above the letter, initiate squish.
                     if (lamp.get_position().y > letter.get_position().y + 0.5) {
                         if (!letter.squishing) {

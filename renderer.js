@@ -599,7 +599,7 @@ export class Renderer
     );
     this.blit_buffer     = RenderBuffers.kPostProcessing;
     this.frame_id        = 0;
-    this.enable_taa      = false;
+    this.enable_taa      = true;
     this.enable_pcf      = true;
 
     this.debug_cube           = new DebugCube();
