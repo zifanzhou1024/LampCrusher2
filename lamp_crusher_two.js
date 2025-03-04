@@ -631,7 +631,7 @@ async function main()
             for (let i = allLetters.length - 1; i >= 0; i--) {
                 const letter = allLetters[i];
                 const letterOBB = getOBB(letter, letterCollisionScale);
-                if (obbIntersect(lampOBB, letterOBB)) {
+                if (0 && obbIntersect(lampOBB, letterOBB)) {
                     // If the lamp is above the letter, initiate squish.
                     if (lamp.get_position().y > letter.get_position().y + 0.5) {
                         if (!letter.squishing) {
