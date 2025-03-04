@@ -43,9 +43,9 @@ const perspective_matrix_rh = ( fov, aspect, near, far ) =>
   const f        = 1.0 / Math.tan( fov / 2 );
 
   return new Matrix4().set(
-    f / aspect, 0, 0,                               0,
-    0,          f, 0,                               0,
-    0,          0, ( near + far ) / ( near - far ), -1,
+    f / aspect, 0, 0,                                   0,
+    0,          f, 0,                                   0,
+    0,          0, ( near + far ) / ( near - far ),    -1,
     0,          0, ( 2 * near * far ) / ( near - far ), 0
   );
 }
@@ -899,8 +899,6 @@ export class Renderer
 
     const target = new Vector3( 0.0, 0.0, 0.0 );
     const camera = target.clone().sub( scene.directional_light.direction.clone().normalize().multiplyScalar( 40.0 ) );
-    this.draw_debug_cube( new Matrix4().setPosition( camera ), new Vector4( 0.0, 0.0, 1.0, 1.0 ) );
-    this.draw_debug_cube( new Matrix4().setPosition( target ), new Vector4( 0.0, 0.0, 1.0, 1.0 ) );
 
     this.directional_light_proj      = orthographic_proj( -35, 35, -35, 35, 0.1, 75 );
     this.directional_light_view      = (new Matrix4()).lookAt( camera, target, new Vector3( 0, 0, 1 ) ).setPosition( camera ).invert();
