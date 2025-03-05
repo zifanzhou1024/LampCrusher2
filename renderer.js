@@ -146,6 +146,34 @@ export class Actor
   }
 }
 
+
+export class Bone
+{
+  constructor( name, transform, parent )
+  {
+    this.name      = name;
+    this.transform = transform.clone();
+    this.bind_pose = transform.clone();
+    this.children  = [];
+    this.parent    = parent;
+
+    if ( this.parent )
+    {
+      this.parent.children.push( this );
+    }
+  }
+
+  draw_debug( renderer, parent_transform = new Matrix4() )
+  {
+    const transform = new Matrix4().multiplyMatrices( parent_transform, this.transform );
+    renderer.draw_debug_axes( transform.clone().multiply( new Matrix4().makeScale( 0.2, 0.2, 0.2 ) ) );
+    for ( let i = 0; i < this.children.length; i++ )
+    {
+      this.children[ i ].draw_debug( renderer, transform.clone() );
+    }
+  }
+}
+
 export class ModelSubset
 {
   constructor( name, vertices, indices, transform )
@@ -174,10 +202,11 @@ export class ModelSubset
 
 export class Model
 {
-  constructor( name, model_subsets )
+  constructor( name, model_subsets, skeleton )
   {
-    this.name    = name;
-    this.subsets = model_subsets;
+    this.name     = name;
+    this.subsets  = model_subsets;
+    this.skeleton = skeleton
 
     let min = new Vector3(  Infinity,  Infinity,  Infinity );
     let max = new Vector3( -Infinity, -Infinity, -Infinity );
@@ -351,7 +380,7 @@ export const kCubeMesh = new GpuMesh(
   ]
 );
 
-export function load_gltf_model( asset )
+export function load_gltf_model( asset, transform = new Matrix4() )
 {
   const loader = new GLTFLoader();
   loader.setPath( '/assets/' );
@@ -369,6 +398,43 @@ export function load_gltf_model( asset )
         return result;
       };
 
+      const traverse_bones = ( node, parent = null ) =>
+      {
+        if ( !node.isBone && !parent )
+        {
+          if ( !node.children )
+          {
+            return null;
+          }
+
+          for ( let i = 0; i < node.children.length; i++ )
+          {
+            const skeleton = traverse_bones( node.children[ i ] );
+            if ( skeleton )
+            {
+              return skeleton;
+            }
+          }
+
+          return null;
+        }
+
+        let bone = parent;
+        if ( node.isBone )
+        {
+          bone = new Bone( node.name, parent == null ? node.matrixWorld.clone().premultiply( transform ) : node.matrix.clone(), parent );
+        }
+
+        if ( node.children )
+        {
+          node.children.forEach( child => traverse_bones( child, bone ) )
+        }
+
+        return bone;
+      }
+
+      const skeleton = traverse_bones( gltf.scene );
+
       const meshes  = flatten_scene( gltf.scene );
       const subsets = meshes.map( 
         ( obj ) =>
@@ -378,7 +444,8 @@ export function load_gltf_model( asset )
             return null;
           }
 
-          const geometry = obj.geometry;
+          const mesh     = obj;
+          const geometry = mesh.geometry;
 
           if ( !geometry || !geometry.attributes || !geometry.index )
           {
@@ -395,6 +462,8 @@ export function load_gltf_model( asset )
           const normals      = geometry.attributes.normal.array;
           const uvs          = geometry.attributes.uv ? geometry.attributes.uv.array : new Float32Array( positions.length / 3 * 2 );
           const indices      = geometry.index.array;
+          const bone_weights = geometry.attributes.skinWeight ? geometry.attributes.skinWeight.array : null;
+          const bone_indices = geometry.attributes.skinIndex  ? geometry.attributes.skinIndex.array  : null;
 
           if ( !positions || !normals || !uvs || !indices )
           {
@@ -419,7 +488,7 @@ export function load_gltf_model( asset )
           }
 
           // Don't ask me why...
-          return new ModelSubset( obj.name, vertices, indices, obj.matrixWorld );
+          return new ModelSubset( mesh.name, vertices, indices, mesh.matrixWorld.clone().premultiply( transform ) );
         }
       ).filter( subset => subset != null );
 
@@ -429,7 +498,7 @@ export function load_gltf_model( asset )
         return null;
       }
 
-      const model = new Model( `assets/${asset}`, subsets );
+      const model = new Model( `assets/${asset}`, subsets, skeleton );
 
       resolve( model );
     }, undefined, ( error ) =>
@@ -949,9 +1018,9 @@ export class Renderer
 
 
     const target = new Vector3( 0.0, 0.0, 0.0 );
-    const camera = target.clone().sub( scene.directional_light.direction.clone().normalize().multiplyScalar( 40.0 ) );
+    const camera = target.clone().sub( scene.directional_light.direction.clone().normalize().multiplyScalar( 20.0 ) );
 
-    this.directional_light_proj      = orthographic_proj( -35, 35, -35, 35, 0.1, 75 );
+    this.directional_light_proj      = orthographic_proj( -25, 25, -25, 25, 0.1, 55 );
     this.directional_light_view      = (new Matrix4()).lookAt( camera, target, new Vector3( 0, 0, 1 ) ).setPosition( camera ).invert();
     this.directional_light_view_proj = (new Matrix4()).multiplyMatrices( this.directional_light_proj, this.directional_light_view );
 

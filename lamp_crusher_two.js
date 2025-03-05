@@ -149,7 +149,7 @@ async function main()
 
     const letterMaterial = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 0.1, g_Metallic: 0.5 });
     const lampMaterial   = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [1.0, 1.0, 1.0], g_Roughness: 0.1, g_Metallic: 0.5 });
-    const lampModel      = await load_gltf_model('lamp.glb');
+    const lampModel      = await load_gltf_model('lamp.glb', new Matrix4().makeRotationX( Math.PI / 2 ).multiply( new Matrix4().makeScale( 3, 3, 3 ) ));
     const letterModels   = {
       'p': await load_gltf_model('pixar_p.glb'),
       'i': await load_gltf_model('pixar_i.glb'),
@@ -159,7 +159,7 @@ async function main()
     }
 
     const lamp = new Actor(lampModel, lampMaterial, 0.2);
-    lamp.set_position_euler_scale(new Vector3(0, 0, -10), new Euler(0, -Math.PI / 2, 0, 'XYZ'), new Vector3(3, 3, 3));
+    lamp.set_position_euler_scale(new Vector3(0, 0, -10), new Euler(0, -Math.PI / 2, 0, 'XYZ'), new Vector3(1, 1, 1));
     scene.add(lamp);
 
     scene.spot_light = new SpotLight(
@@ -734,8 +734,8 @@ async function main()
         renderer.draw_obb( lamp.transform, lamp.aabb, new Vector4( 1.0, 0.0, 0.0, 1.0 ) );
         staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
         fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
-        renderer.draw_debug_axes( new Matrix4() );
-        renderer.draw_debug_axes( lamp.transform );
+
+        lamp.mesh.skeleton.draw_debug( renderer, lamp.transform );
 
         renderer.submit(scene);
     }
