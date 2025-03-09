@@ -735,7 +735,7 @@ async function main()
         staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
         fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
 
-        lamp.update_anim( "Jump",  Math.sin( time ) );
+        lamp.update_anim( "Jump",  Math.sin( time * 4.0 ) * 0.5 + 0.5 );
         lamp.mesh.skeleton.draw_debug( renderer, lamp.transform );
 
         renderer.submit(scene);
