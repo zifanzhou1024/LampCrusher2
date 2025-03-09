@@ -1,7 +1,7 @@
 // lamp_crusher_two.js
 import { GpuDevice, GpuMesh, gl } from "./gpu.js"
 import { kShaders } from "./shaders.js"
-import { Actor, Scene, Camera, Material, Renderer, DirectionalLight, SpotLight, kGroundMesh, kCubeMesh, load_gltf_model } from './renderer.js'
+import { Actor, Scene, Camera, Material, SkinnedMaterial, Renderer, DirectionalLight, SpotLight, kGroundMesh, kCubeMesh, load_gltf_model } from './renderer.js'
 import { PhysicsEngine } from "./physics_engine.js";
 
 import * as THREE from 'three';
@@ -148,7 +148,7 @@ async function main()
 
 
     const letterMaterial = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 0.1, g_Metallic: 0.5 });
-    const lampMaterial   = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [1.0, 1.0, 1.0], g_Roughness: 0.1, g_Metallic: 0.5 });
+    const lampMaterial   = new SkinnedMaterial(kShaders.PS_PBRMaterial, { g_Diffuse: [1.0, 1.0, 1.0], g_Roughness: 0.1, g_Metallic: 0.5 });
     const lampModel      = await load_gltf_model('lamp.glb', new Matrix4().makeRotationX( Math.PI / 2 ).multiply( new Matrix4().makeScale( 3, 3, 3 ) ));
     const letterModels   = {
       'p': await load_gltf_model('pixar_p.glb'),
@@ -735,6 +735,7 @@ async function main()
         staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
         fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
 
+        lamp.update_anim( "Jump",  Math.sin( time ) );
         lamp.mesh.skeleton.draw_debug( renderer, lamp.transform );
 
         renderer.submit(scene);

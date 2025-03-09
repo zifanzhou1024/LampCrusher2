@@ -9,39 +9,74 @@ export class GpuDevice
   }
 }
 
-const kVertexStride = (3 + 3 + 2) * Float32Array.BYTES_PER_ELEMENT;
+const kModelStdVertexStride = ( 3 + 3 + 2 ) * Float32Array.BYTES_PER_ELEMENT;
 
 export class GpuMesh
 {
-  constructor(vertices, indices)
+  constructor( vertices, indices )
   {
-    this.vertices      = new Float32Array(vertices);
-    this.indices       = new Uint16Array(indices);
+    this.vertices      = new Float32Array( vertices );
+    this.indices       = new Uint16Array( indices );
     this.vertex_buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vertex_buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.STATIC_DRAW);
+    gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
+    gl.bufferData( gl.ARRAY_BUFFER, this.vertices, gl.STATIC_DRAW );
 
 
     this.index_buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.index_buffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STATIC_DRAW);
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.index_buffer );
+    gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STATIC_DRAW );
+    this.stride = kModelStdVertexStride;
   }
 
   draw()
   {
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vertex_buffer);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.index_buffer);
+    gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.index_buffer );
 
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, kVertexStride, 0);
+    gl.enableVertexAttribArray( 0 );
+    gl.vertexAttribPointer( 0, 3, gl.FLOAT, false, this.stride, 0 );
 
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, kVertexStride, 3 * Float32Array.BYTES_PER_ELEMENT);
+    gl.enableVertexAttribArray( 1 );
+    gl.vertexAttribPointer( 1, 3, gl.FLOAT, false, this.stride, 3 * Float32Array.BYTES_PER_ELEMENT );
 
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, kVertexStride, (3 + 3) * Float32Array.BYTES_PER_ELEMENT);
+    gl.enableVertexAttribArray( 2 );
+    gl.vertexAttribPointer( 2, 2, gl.FLOAT, false, this.stride, ( 3 + 3 ) * Float32Array.BYTES_PER_ELEMENT );
 
-    gl.drawElements(gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements( gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0 );
+  }
+}
+
+const kModelSkinnedVertexStride = ( 3 + 3 + 2 + 2 + 2 ) * Float32Array.BYTES_PER_ELEMENT;
+
+export class GpuSkinnedMesh extends GpuMesh
+{
+  constructor( vertices, indices )
+  {
+    super( vertices, indices );
+    this.stride = kModelSkinnedVertexStride;
+  }
+
+  draw()
+  {
+    gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.index_buffer );
+
+    gl.enableVertexAttribArray( 0 );
+    gl.vertexAttribPointer( 0, 3, gl.FLOAT, false, this.stride, 0 );
+
+    gl.enableVertexAttribArray( 1 );
+    gl.vertexAttribPointer( 1, 3, gl.FLOAT, false, this.stride, 3 * Float32Array.BYTES_PER_ELEMENT );
+
+    gl.enableVertexAttribArray( 2 );
+    gl.vertexAttribPointer( 2, 2, gl.FLOAT, false, this.stride, ( 3 + 3 ) * Float32Array.BYTES_PER_ELEMENT );
+
+    gl.enableVertexAttribArray( 3 );
+    gl.vertexAttribPointer( 3, 2, gl.FLOAT, false, this.stride, ( 3 + 3 + 2 ) * Float32Array.BYTES_PER_ELEMENT );
+
+    gl.enableVertexAttribArray( 4 );
+    gl.vertexAttribPointer( 4, 2, gl.FLOAT, false, this.stride, ( 3 + 3 + 2 + 2 ) * Float32Array.BYTES_PER_ELEMENT );
+
+    gl.drawElements( gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0 );
   }
 }
 
@@ -165,13 +200,24 @@ export class GpuGraphicsPSO
       {
         gl.uniform4fv(location, value);
       }
-      else if (value.length === 9)
+      else if ( value.length === 9 )
       {
-        gl.uniformMatrix3fv(location, false, value);
+        gl.uniformMatrix3fv( location, false, value );
       }
-      else if (value.length === 16)
+      else if ( value.length === 16 )
       {
-        gl.uniformMatrix4fv(location, false, value);
+        gl.uniformMatrix4fv( location, false, value );
+      }
+    }
+    else if ( value instanceof Float32Array )
+    {
+      if ( value.length % 16 === 0 )
+      {
+        gl.uniformMatrix4fv( location, false, value );
+      }
+      else if ( value.length % 9 === 0 )
+      {
+        gl.uniformMatrix3fv( location, false, value );
       }
     }
     else if (value instanceof WebGLTexture)

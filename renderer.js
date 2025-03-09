@@ -1,4 +1,4 @@
-import { gl, g_CurrentPSO, GpuDevice, GpuMesh, GpuVertexShader, GpuFragmentShader, GpuGraphicsPSO } from "./gpu.js"
+import { gl, g_CurrentPSO, GpuDevice, GpuMesh, GpuSkinnedMesh, GpuVertexShader, GpuFragmentShader, GpuGraphicsPSO } from "./gpu.js"
 import { kShaders } from "./shaders.js"
 
 import * as THREE from 'three';
@@ -144,32 +144,189 @@ export class Actor
   {
     return ( new Vector3() ).setFromMatrixScale( this.transform );
   }
+
+  update_anim( name, t )
+  {
+    this.mesh.update_anim( name, t, this.transform );
+  }
 }
 
+export class AnimTrack
+{
+  constructor( name, times, values, type )
+  {
+    this.name   = name;
+    this.times  = times;
+    if ( type === 'vector' )
+    {
+      const array_to_vec3 = ( arr ) => Array.from(
+        { length: arr.length / 3 },
+        (_, i) => new Vector3(
+          arr[ i * 3 + 0 ],
+          arr[ i * 3 + 1 ],
+          arr[ i * 3 + 2 ]
+        )
+      );
+
+      this.values = array_to_vec3( values );
+    }
+    else if ( type === 'quaternion' )
+    {
+      const array_to_quat = ( arr ) => Array.from(
+        { length: arr.length / 4 },
+        (_, i) => new Quaternion(
+          arr[ i * 4 + 0 ],
+          arr[ i * 4 + 1 ],
+          arr[ i * 4 + 2 ],
+          arr[ i * 4 + 3 ]
+        )
+      );
+      this.values = array_to_quat( values );
+    }
+  }
+}
+
+export class AnimClip
+{
+  constructor( name, position_tracks, rotation_tracks )
+  {
+    this.name      = name;
+    this.positions = position_tracks;
+    this.rotations = rotation_tracks;
+  }
+
+  get_bone_transform( bone_idx, t )
+  {
+    const track_get_a_v0_v1 = ( track ) =>
+    {
+      let i = 0;
+      while ( i < track.times.length - 1 && track.times[ i + 1 ] <= t )
+      {
+        i++;
+      }
+
+      const t0 = track.times[ i + 0 ];
+      const t1 = track.times[ i + 1 ] || t0;
+      const a  = ( t1 - t0 ) > 0 ? ( t - t0 ) / ( t1 - t0 ) : 0.0;
+
+      const v0 = track.values[ i + 0 ];
+      const v1 = track.values[ i + 1 ] || v0;
+
+      return [ a, v0, v1 ];
+    }
+
+    const transform = new Matrix4();
+
+    {
+      const [ a, q0, q1 ] = track_get_a_v0_v1( this.rotations[ bone_idx ] );
+      const rotation      = new Quaternion().slerpQuaternions( q0, q1, a );
+      transform.premultiply( new Matrix4().makeRotationFromQuaternion( rotation ) );
+    }
+
+    {
+      const [ a, p0, p1 ] = track_get_a_v0_v1( this.positions[ bone_idx ] );
+      const position      = p0.clone().lerp( p1, a );
+      transform.setPosition( position );
+    }
+
+    return transform;
+  }
+}
 
 export class Bone
 {
-  constructor( name, transform, parent )
+  constructor( name, idx, transform, parent )
   {
-    this.name      = name;
-    this.transform = transform.clone();
-    this.bind_pose = transform.clone();
-    this.children  = [];
-    this.parent    = parent;
+    this.name              = name;
+
+    this.transform         = transform.clone();
+    this.prev_transform    = transform.clone();
+    this.bind_pose         = transform.clone();
+    this.inverse_bind_pose = transform.clone().invert();
+    this.idx               = idx;
+
+    this.children          = [];
+    this.parent            = parent;
 
     if ( this.parent )
     {
       this.parent.children.push( this );
     }
   }
+}
+
+export class Skeleton
+{
+  constructor( root, transform )
+  {
+    this.root           = root;
+    this.root_transform = transform.clone();
+
+    const flatten_bones = ( bone, result = [] ) =>
+    {
+      result.push( bone );
+      for ( let i = 0; i < bone.children.length; i++ )
+      {
+        flatten_bones( bone.children[ i ], result );
+      }
+      return result;
+    }
+
+    this.bones              = flatten_bones( root );
+    this.bind_matrices      = new Array( this.bones.length );
+    this.bone_matrices      = new Float32Array( this.bones.length * 4 * 4 );
+    this.prev_bone_matrices = new Float32Array( this.bones.length * 4 * 4 );
+
+    const fill_bind_matrices = ( bone, parent_transform = new Matrix4() ) =>
+    {
+      const world_transform = new Matrix4().multiplyMatrices( parent_transform, bone.bind_pose );
+
+      for ( let i = 0; i < bone.children.length; i++ )
+      {
+        fill_bind_matrices( bone.children[ i ], world_transform.clone() );
+      }
+
+      // world_transform.toArray( this.bone_matrices, bone.idx * 16 );
+      this.bind_matrices[ bone.idx ] = world_transform;
+    }
+
+    fill_bind_matrices( this.root );
+    this.inverse_bind_matrices = this.bind_matrices.map( m => m.clone().invert() );
+  }
+
+  update_anim( anim_clip, t, transform )
+  {
+    for ( let i = 0; i < this.bones.length; i++ )
+    {
+      const bone          = this.bones[ i ];
+      bone.prev_transform = bone.transform.clone();
+      bone.transform      = anim_clip.get_bone_transform( i, t ); // bone.bind_pose.clone(); 
+    }
+
+    this.prev_bone_matrices = this.bone_matrices;
+    this.bone_matrices      = new Float32Array( this.bones.length * 16 );
+    const fill_bone_matrices = ( bone, parent_transform = new Matrix4() ) =>
+    {
+      const world_transform = new Matrix4().multiplyMatrices( parent_transform, bone.transform );
+
+      for ( let i = 0; i < bone.children.length; i++ )
+      {
+        fill_bone_matrices( bone.children[ i ], world_transform.clone() );
+      }
+
+      const inverse_bind = this.inverse_bind_matrices[ bone.idx ];
+      world_transform.multiply( inverse_bind ).toArray( this.bone_matrices, bone.idx * 16 );
+    }
+
+    fill_bone_matrices( this.root, new Matrix4().multiplyMatrices( transform, this.root_transform ) );
+  }
 
   draw_debug( renderer, parent_transform = new Matrix4() )
   {
-    const transform = new Matrix4().multiplyMatrices( parent_transform, this.transform );
-    renderer.draw_debug_axes( transform.clone().multiply( new Matrix4().makeScale( 0.2, 0.2, 0.2 ) ) );
-    for ( let i = 0; i < this.children.length; i++ )
+    for ( let i = 0; i < this.bones.length; i++ ) 
     {
-      this.children[ i ].draw_debug( renderer, transform.clone() );
+      const bone_matrix =  new Matrix4().fromArray( this.bone_matrices, i * 16 );
+      renderer.draw_debug_axes( bone_matrix.multiply( this.bind_matrices[ i ] ).multiply( new Matrix4().makeScale( 0.2, 0.2, 0.2 ) ) );
     }
   }
 }
@@ -187,33 +344,50 @@ export class ModelSubset
   {
     if ( model_uniform )
     {
-      const model = parent_transform.clone().multiply( this.transform );
+      const model = new Matrix4().multiplyMatrices( parent_transform, this.transform );
       g_CurrentPSO.set_uniform( model_uniform, model.elements );
     }
 
     if ( prev_model_uniform )
     {
-      const prev_model = prev_parent_transform.clone().multiply( this.transform );
+      const prev_model = new Matrix4().multiplyMatrices( parent_transform, this.transform );
       g_CurrentPSO.set_uniform( prev_model_uniform, prev_model.elements );
     }
     this.gpu_mesh.draw();
   }
 }
 
+export class SkinnedModelSubset
+{
+  constructor( name, vertices, indices, transform )
+  {
+    this.name      = name;
+    this.gpu_mesh  = new GpuSkinnedMesh( vertices, indices );
+    this.transform = transform;
+  }
+
+  draw( bone_matrices, prev_bone_matrices )
+  {
+    g_CurrentPSO.set_uniform( 'g_BoneMatrices',     bone_matrices           );
+    g_CurrentPSO.set_uniform( 'g_PrevBoneMatrices', prev_bone_matrices      );
+    g_CurrentPSO.set_uniform( 'g_Model',            this.transform.elements );
+    this.gpu_mesh.draw();
+  }
+}
+
 export class Model
 {
-  constructor( name, model_subsets, skeleton )
+  constructor( name, model_subsets, skeleton, animations )
   {
-    this.name     = name;
-    this.subsets  = model_subsets;
-    this.skeleton = skeleton
+    this.name       = name;
+    this.subsets    = model_subsets;
 
     let min = new Vector3(  Infinity,  Infinity,  Infinity );
     let max = new Vector3( -Infinity, -Infinity, -Infinity );
     for ( let isubset = 0; isubset < this.subsets.length; isubset++ )
     {
       const subset = this.subsets[ isubset ];
-      for ( let ivertex = 0; ivertex < subset.gpu_mesh.vertices.length; ivertex += ( 3 + 3 + 2 ) )
+      for ( let ivertex = 0; ivertex < subset.gpu_mesh.vertices.length; ivertex += subset.gpu_mesh.stride )
       {
         const x = subset.gpu_mesh.vertices[ ivertex + 0 ];
         const y = subset.gpu_mesh.vertices[ ivertex + 1 ];
@@ -238,6 +412,57 @@ export class Model
     {
       const subset = this.subsets[ i ];
       subset.draw( model_uniform, model, prev_model_uniform, prev_model );
+    }
+  }
+}
+
+export class SkinnedModel extends Model
+{
+  constructor( name, skinned_subsets, skeleton, animations )
+  {
+    super( name, skinned_subsets );
+    this.skeleton   = skeleton
+    this.animations = animations;
+
+    let min = new Vector3(  Infinity,  Infinity,  Infinity );
+    let max = new Vector3( -Infinity, -Infinity, -Infinity );
+    for ( let isubset = 0; isubset < this.subsets.length; isubset++ )
+    {
+      const subset = this.subsets[ isubset ];
+      for ( let ivertex = 0; ivertex < subset.gpu_mesh.vertices.length; ivertex += subset.gpu_mesh.stride )
+      {
+        const x = subset.gpu_mesh.vertices[ ivertex + 0 ];
+        const y = subset.gpu_mesh.vertices[ ivertex + 1 ];
+        const z = subset.gpu_mesh.vertices[ ivertex + 2 ];
+        const pos = new Vector3( x, y, z ).applyMatrix4( this.skeleton.root_transform ).applyMatrix4( subset.transform );
+        
+        min.x   = Math.min( min.x, pos.x );
+        min.y   = Math.min( min.y, pos.y );
+        min.z   = Math.min( min.z, pos.z );
+        max.x   = Math.max( max.x, pos.x );
+        max.y   = Math.max( max.y, pos.y );
+        max.z   = Math.max( max.z, pos.z );
+      }
+    }
+
+    this.aabb    = new Box3( min, max );
+  }
+
+  update_anim( name, t, transform )
+  {
+    this.anim = name;
+    this.t    = t;
+  }
+
+  draw( _, model )
+  {
+    const anim_clip = this.animations.get( this.anim );
+    this.skeleton.update_anim( anim_clip, this.t, model );
+
+    for ( let i = 0; i < this.subsets.length; i++ )
+    {
+      const subset = this.subsets[ i ];
+      subset.draw( this.skeleton.bone_matrices, this.skeleton.prev_bone_matrices );
     }
   }
 }
@@ -398,6 +623,8 @@ export function load_gltf_model( asset, transform = new Matrix4() )
         return result;
       };
 
+      let bone_count = 0;
+
       const traverse_bones = ( node, parent = null ) =>
       {
         if ( !node.isBone && !parent )
@@ -409,10 +636,10 @@ export function load_gltf_model( asset, transform = new Matrix4() )
 
           for ( let i = 0; i < node.children.length; i++ )
           {
-            const skeleton = traverse_bones( node.children[ i ] );
-            if ( skeleton )
+            const root = traverse_bones( node.children[ i ] );
+            if ( root )
             {
-              return skeleton;
+              return root;
             }
           }
 
@@ -422,7 +649,9 @@ export function load_gltf_model( asset, transform = new Matrix4() )
         let bone = parent;
         if ( node.isBone )
         {
-          bone = new Bone( node.name, parent == null ? node.matrixWorld.clone().premultiply( transform ) : node.matrix.clone(), parent );
+          // TODO(bshihabi): The way that we're doing bone indices is not really or robust...
+          bone = new Bone( node.name, bone_count, node.matrix.clone(), parent );
+          bone_count++;
         }
 
         if ( node.children )
@@ -430,7 +659,14 @@ export function load_gltf_model( asset, transform = new Matrix4() )
           node.children.forEach( child => traverse_bones( child, bone ) )
         }
 
-        return bone;
+        if ( !parent )
+        {
+          return new Skeleton( bone, transform );
+        }
+        else
+        {
+          return bone;
+        }
       }
 
       const skeleton = traverse_bones( gltf.scene );
@@ -470,8 +706,11 @@ export function load_gltf_model( asset, transform = new Matrix4() )
             return null;
           }
 
-          const vertex_count = positions.length / 3;
-          const vertices     = new Float32Array( vertex_count * ( 3 + 3 + 2 ) );
+          const is_skinned    = bone_weights && bone_indices;
+
+          const vertex_count  = positions.length / 3;
+          const vertex_stride = is_skinned ? ( 3 + 3 + 2 + 2 + 2 ) : ( 3 + 3 + 2 );
+          const vertices      = new Float32Array( vertex_count * vertex_stride );
 
           for ( let isrc = 0, idst = 0; isrc < vertex_count; isrc++ )
           {
@@ -485,10 +724,24 @@ export function load_gltf_model( asset, transform = new Matrix4() )
 
               vertices[ idst++ ] = uvs[ isrc * 2 + 0 ];
               vertices[ idst++ ] = uvs[ isrc * 2 + 1 ];
+              
+              if ( is_skinned )
+              {
+                vertices[ idst++ ] = bone_weights[ isrc * 4 + 0 ];
+                vertices[ idst++ ] = bone_weights[ isrc * 4 + 1 ];
+                vertices[ idst++ ] = bone_indices[ isrc * 4 + 0 ];
+                vertices[ idst++ ] = bone_indices[ isrc * 4 + 1 ];
+              }
           }
 
-          // Don't ask me why...
-          return new ModelSubset( mesh.name, vertices, indices, mesh.matrixWorld.clone().premultiply( transform ) );
+          if ( is_skinned )
+          {
+            return new SkinnedModelSubset( mesh.name, vertices, indices, mesh.matrixWorld.clone() );
+          }
+          else
+          {
+            return new ModelSubset( mesh.name, vertices, indices, mesh.matrixWorld.clone().premultiply( transform ) );
+          }
         }
       ).filter( subset => subset != null );
 
@@ -498,9 +751,32 @@ export function load_gltf_model( asset, transform = new Matrix4() )
         return null;
       }
 
-      const model = new Model( `assets/${asset}`, subsets, skeleton );
+      let animations = null;
+      if ( skeleton )
+      {
+        const bones_name_to_idx = new Map( skeleton.bones.map( bone => [ bone.name, bone.idx ] ) );
+        animations = new Map( 
+          gltf.animations.map(
+            clip =>
+            {
+              const track_bone_idx  = ( track ) => bones_name_to_idx.get( track.name.split( '.' )[ 0 ] );
 
-      resolve( model );
+              const tracks          = clip.tracks.map( track => new AnimTrack( track.name, track.times, track.values, track.ValueTypeName ) );
+              const position_tracks = tracks.filter( track => track.name.split( '.' )[ 1 ] == 'position'   ).sort( ( a, b ) => track_bone_idx( a ) < track_bone_idx( b ) );
+              const rotation_tracks = tracks.filter( track => track.name.split( '.' )[ 1 ] == 'quaternion' ).sort( ( a, b ) => track_bone_idx( a ) - track_bone_idx( b ) );
+              return [ clip.name, new AnimClip( clip.name, position_tracks, rotation_tracks ) ];
+            }
+          )
+        );
+
+        const skinned_model = new SkinnedModel( `assets/${asset}`, subsets, skeleton, animations );
+        resolve( skinned_model );
+      }
+      else
+      {
+        const model = new Model( `assets/${asset}`, subsets );
+        resolve( model );
+      }
     }, undefined, ( error ) =>
     {
       reject( new Error( "Error loading GLTF: " + error ) );
@@ -510,18 +786,35 @@ export function load_gltf_model( asset, transform = new Matrix4() )
 
 export class Material
 {
-  constructor(pixel_shader, uniforms)
+  constructor( pixel_shader, uniforms )
   {
     this.pso = new GpuGraphicsPSO(
-      new GpuVertexShader(kShaders.VS_ModelStdBasic),
-      new GpuFragmentShader(pixel_shader),
+      new GpuVertexShader( kShaders.VS_ModelStdBasic ),
+      new GpuFragmentShader( pixel_shader ),
       uniforms
     );
   }
 
-  bind(uniforms)
+  bind( uniforms )
   {
-    this.pso.bind(uniforms);
+    this.pso.bind( uniforms );
+  }
+}
+
+export class SkinnedMaterial
+{
+  constructor( pixel_shader, uniforms )
+  {
+    this.pso = new GpuGraphicsPSO(
+      new GpuVertexShader( kShaders.VS_ModelSkinned ),
+      new GpuFragmentShader( pixel_shader ),
+      uniforms
+    );
+  }
+
+  bind( uniforms )
+  {
+    this.pso.bind( uniforms );
   }
 }
 
@@ -1018,9 +1311,9 @@ export class Renderer
 
 
     const target = new Vector3( 0.0, 0.0, 0.0 );
-    const camera = target.clone().sub( scene.directional_light.direction.clone().normalize().multiplyScalar( 20.0 ) );
+    const camera = target.clone().sub( scene.directional_light.direction.clone().normalize().multiplyScalar( 10.0 ) );
 
-    this.directional_light_proj      = orthographic_proj( -25, 25, -25, 25, 0.1, 55 );
+    this.directional_light_proj      = orthographic_proj( -25, 25, -25, 25, 0.1, 30 );
     this.directional_light_view      = (new Matrix4()).lookAt( camera, target, new Vector3( 0, 0, 1 ) ).setPosition( camera ).invert();
     this.directional_light_view_proj = (new Matrix4()).multiplyMatrices( this.directional_light_proj, this.directional_light_view );
 

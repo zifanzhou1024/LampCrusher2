@@ -40,6 +40,59 @@ export const kShaders = {
       gl_Position      = ndc_pos + vec4( g_TAAJitter.xy * ndc_pos.w, 0.0, 0.0 );
     } `,
 
+  'VS_ModelSkinned': `
+    precision highp float;
+    varying vec3 f_Normal;
+    varying vec2 f_UV;
+    varying vec4 f_NDCPos;
+    varying vec4 f_PrevNDCPos;
+
+    attribute vec3 position;
+    attribute vec3 normal;
+    attribute vec2 uv;
+    attribute vec2 bone_weights;
+    attribute vec2 bone_indices;
+
+    uniform mat4 g_Model;
+
+    uniform mat4 g_BoneMatrices[4];
+    uniform mat4 g_ViewProj;
+
+    uniform mat4 g_PrevBoneMatrices[4];
+    uniform mat4 g_PrevViewProj;
+
+    uniform vec3 g_TAAJitter;
+        
+    void main()
+    {
+      vec4 model_pos        = g_Model * vec4( position, 1.0 );
+
+      mat4 skin_matrix      = g_BoneMatrices[int(bone_indices.x)] * bone_weights.x +
+                              g_BoneMatrices[int(bone_indices.y)] * bone_weights.y;
+
+      vec4 ws_pos           = skin_matrix * model_pos;
+
+      mat4 prev_skin_matrix = g_PrevBoneMatrices[int(bone_indices.x)] * bone_weights.x +
+                              g_PrevBoneMatrices[int(bone_indices.y)] * bone_weights.y;
+      vec4 prev_ws_pos      = prev_skin_matrix * model_pos;
+
+      vec4 ndc_pos          = g_ViewProj * ws_pos;
+      vec4 prev_ndc         = g_PrevViewProj * prev_ws_pos;
+
+      vec3 normal_scale = vec3(
+        dot(g_Model[0].xyz, g_Model[0].xyz),
+        dot(g_Model[1].xyz, g_Model[1].xyz),
+        dot(g_Model[2].xyz, g_Model[2].xyz)
+      );
+
+      f_NDCPos              = ndc_pos;
+      f_PrevNDCPos          = prev_ndc;
+      f_Normal              = normalize( mat3( skin_matrix ) * ( mat3( g_Model ) * ( normal / normal_scale ) ) );
+      f_UV                  = uv;
+
+      gl_Position           = ndc_pos + vec4( g_TAAJitter.xy * ndc_pos.w, 0.0, 0.0 );
+    } `,
+
   'PS_PBRMaterial': `
     #extension GL_EXT_draw_buffers : require
     precision highp float;
@@ -365,7 +418,7 @@ export const kShaders = {
           diffuse
         );
 
-        vec3 irradiance = directional * ( 1.0 - shadow ) + spot_light;
+        vec3 irradiance = directional * max( 1.0 - shadow, 0.2 ) + spot_light;
 
         gl_FragColor    =  depth == 0.0 ? vec4( g_SkyColor, 1.0 ) : vec4( irradiance, 1.0 );
       }`,
