@@ -591,6 +591,7 @@ async function main()
 
                 if (move.lengthSq() > 0) {
                     move.normalize();
+                    let prevLampPos = lamp.get_position().clone();
                     const pos = lamp.get_position().addScaledVector(move, speed);
                     lamp.set_position(pos);
 
@@ -656,19 +657,29 @@ async function main()
             for (let i = allLetters.length - 1; i >= 0; i--) {
                 const letter = allLetters[i];
                 const letterOBB = getOBB(letter, letterCollisionScale);
-                if (obbIntersect(lampOBB, letterOBB)) { // Fixme: Disable collision
-                    // If the lamp is above the letter, initiate squish.
-                    if (lamp.get_position().y > letter.get_position().y + 0.5) {
+                if (obbIntersect(lampOBB, letterOBB)) {
+                    // Determine if both objects are grounded.
+                    const lampGrounded = lamp.is_grounded();
+                    const letterGrounded = Math.abs(letter.get_position().y) < 0.1;
+
+                    if (lampGrounded && letterGrounded) {
+                        // Collision while both are on the ground:
+                        // Revert the lamp’s horizontal movement.
+                        lamp.set_position(prevLampPos);
+                    }
+                    else if (!lampGrounded && lamp.get_position().y > letter.get_position().y + 0.5) {
+                        // Lamp is above the letter (i.e. jumping on it):
                         if (!letter.squishing) {
                             letter.squishing = true;
                             letter.squishElapsed = 0;
                             letter.squishDuration = squishDuration;
-                            letter.originalScale = letter.get_scale().clone(); // Use clone() here.
+                            letter.originalScale = letter.get_scale().clone();
                             score += 10;
                             health = Math.min(100, health + 10);
                         }
-                    } else {
-                        // Otherwise, push them apart horizontally
+                    }
+                    else {
+                        // Fallback: push the lamp horizontally away from the letter.
                         let diff = new THREE.Vector3(
                             lamp.get_position().x - letter.get_position().x,
                             0,
@@ -677,21 +688,19 @@ async function main()
                         if (diff.length() > 0.001) {
                             diff.normalize();
                             let attempts = 0;
-                            while (
-                                obbIntersect(
-                                    getOBB(lamp, lampCollisionScale),
-                                    letterOBB
-                                ) &&
-                                attempts < 10
-                                ) {
+                            while (obbIntersect(getOBB(lamp, lampCollisionScale), letterOBB) &&
+                            attempts < 10) {
                                 lamp.get_position().x += diff.x * 0.05;
                                 lamp.get_position().z += diff.z * 0.05;
                                 attempts++;
                             }
                         }
                     }
+                    // Update the lampOBB after changing its position.
+                    // (Optional: recalc lampOBB here if subsequent collisions depend on it.)
                 }
             }
+
         }
 
         // Process squishing animations for both static and falling letters.
