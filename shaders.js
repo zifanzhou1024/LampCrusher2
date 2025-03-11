@@ -635,16 +635,20 @@ precision mediump float;
 
 uniform vec2 u_iResolution;
 uniform float u_iTime;
-uniform vec2 u_iMouse;
+
 uniform mat4 g_Model;     // Model transformation for localizing the smoke
 uniform mat4 g_ModelInv;  // Precomputed inverse of g_Model
 
-// Helper: 2D rotation matrix.
-mat2 rot(float a) { 
-    return mat2(cos(a), sin(a), -sin(a), cos(a)); 
-}
 
-// A simple noise function (adapted from IQ’s noise).
+// New uniforms to pass camera info
+uniform vec3 u_CamPos;
+uniform mat4 u_InverseViewProj;
+
+
+
+//
+// Simple noise function (adapted from IQ’s noise)
+//
 float noise(vec3 x) {
     vec3 p = floor(x);
     vec3 f = fract(x);
@@ -653,7 +657,9 @@ float noise(vec3 x) {
     return fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453) * 2.0 - 1.0;
 }
 
-// Smoke density function with fbm-style accumulation.
+//
+// Smoke density function with fbm accumulation.
+//
 float smoke(vec3 p) {
     vec3 q = 1.2 * p;
     float f = 0.0;
@@ -668,7 +674,9 @@ float smoke(vec3 p) {
     return clamp(1.0 + noiseShape * f - length(p), 0.0, 1.0);
 }
 
-// Raymarching to accumulate smoke density.
+//
+// A helper for raymarching the smoke volume.
+//
 vec3 shading(vec3 ro, vec3 rd) {
     vec3 ld = normalize(vec3(0.5, 1.0, -0.7));
     const int nbStep = 30;
@@ -678,6 +686,8 @@ vec3 shading(vec3 ro, vec3 rd) {
     float end = start + diam;
     float sumDen = 0.0;
     float sumDif = 0.0;
+    
+    
     
     for (int i = 0; i < nbStep; i++) {
         float d = end - float(i) * rayLength;
@@ -700,30 +710,25 @@ vec3 shading(vec3 ro, vec3 rd) {
 }
 
 void main() {
-    // Dummy usage to ensure g_Model stays active.
-    //vec4 dummy = g_Model * vec4(0.0, 0.0, 0.0, 1.0);
-    vec2 fragCoord = gl_FragCoord.xy;
-    vec2 uv = (fragCoord - u_iResolution * 0.5) / u_iResolution.y;
-    vec3 rd = normalize(vec3(uv, -1.07));
+    // Convert fragment coordinates to normalized device coordinates (NDC)
+    vec2 ndc = (gl_FragCoord.xy / u_iResolution) * 2.0 - 1.0;
+    ndc.y = -ndc.y; // adjust if needed (depending on your coordinate convention)
     
-    // Rotate camera based on mouse input.
-    vec2 ang = u_iMouse / u_iResolution;
-    float yaw = 7.0 * ang.x;
-    float pitch = ang.y;
+    // Reconstruct the world-space position for this fragment
+    vec4 clipPos = vec4(ndc, 0.0, 1.0);
+    vec4 worldPos = u_InverseViewProj * clipPos;
+    worldPos /= worldPos.w;
     
-    vec3 camPos = vec3(0.0, 0.3, 3.5);
-    camPos.yz *= rot(pitch);
-    camPos.zx *= rot(yaw);
-    rd.yz *= rot(pitch);
-    rd.zx *= rot(yaw);
+    // Compute the world-space ray direction (from the camera position)
+    vec3 rayDir = normalize(worldPos.xyz - u_CamPos);
     
-    // Transform the camera position and ray direction into the smoke's local space.
-    vec3 localCamPos = (g_ModelInv * vec4(camPos, 1.0)).xyz;
-    vec3 localRd = normalize(mat3(g_ModelInv) * rd);
+    // Transform the camera position and ray direction into smoke’s local space
+    vec3 localCamPos = (g_ModelInv * vec4(u_CamPos, 1.0)).xyz;
+    vec3 localRd = normalize(mat3(g_ModelInv) * rayDir);
     
     vec3 col = shading(localCamPos, localRd);
     // Apply gamma correction.
-    col = pow(col, vec3(1.0/2.2));
+    col = pow(col, vec3(1.0 / 2.2));
     gl_FragColor = vec4(col, 1.0);
 }
 `,

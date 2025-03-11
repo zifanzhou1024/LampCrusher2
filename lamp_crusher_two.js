@@ -682,7 +682,7 @@ async function main()
                     //console.log("After rotation:", transform.elements); // ADD THIS
 
                     // Scale the quad to an appropriate size (adjust scale factors as desired).
-                    const scaleMat = new Matrix4().makeScale(10, 10, 10);
+                    const scaleMat = new Matrix4().makeScale(4, 4, 4);
                     transform.multiply(scaleMat);
                     //console.log("After scaling:", transform.elements); // ADD THIS
 
