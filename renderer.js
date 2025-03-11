@@ -1029,7 +1029,7 @@ export class Renderer
         {
           u_iResolution: [ gl.canvas.width, gl.canvas.height ],
           u_iTime: 0.0,
-          u_iMouse: [ 0.0, 0.0 ],
+          // u_iMouse: [ 0.0, 0.0 ],
         }
     );
 
@@ -1494,7 +1494,7 @@ export class Renderer
     this.smokeShader.bind({
       u_iResolution: [ gl.canvas.width, gl.canvas.height ],
       u_iTime: performance.now() / 1000.0,
-      u_iMouse: [ 0.0, 0.0 ]  // Replace with your actual mouse coordinates if available.
+      // u_iMouse: [ 0.0, 0.0 ]  // Replace with your actual mouse coordinates if available.
     });
 
     // Render the fullscreen quad with the smoke effect.
@@ -1533,8 +1533,6 @@ export class Renderer
 //   }
   // Render smoke at a specific transform (position, rotation, scale)
   render_handler_smoke_at(transform) {
-    console.log("render_handler_smoke_at called");
-    // Compute the inverse of the model transform.
     let invTransform = transform.clone().invert();
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1542,21 +1540,29 @@ export class Renderer
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    // Bind the smoke shader and pass the required uniforms.
-    this.smokeShader.bind({
-      u_iResolution: [ gl.canvas.width, gl.canvas.height ],
+    // Build the uniforms object.
+    const uniforms = {
+      u_iResolution: [gl.canvas.width, gl.canvas.height],
       u_iTime: performance.now() / 1000.0,
-      u_iMouse: [ 0.0, 0.0 ],
+      u_CamPos: this.cameraPosition.toArray(), // stored during submit()
+      u_InverseViewProj: this.inverse_view_proj.elements,
       g_Model: transform.elements,
       g_ModelInv: invTransform.elements,
-      u_ViewProj: this.view_proj.elements  // Pass the view-projection matrix here
-    });
+      u_ViewProj: this.view_proj.elements
+    };
 
-    // Draw the quad.
+    // Bind the shader without trying to set u_iMouse.
+    this.smokeShader.bind(uniforms);
     this.quad.draw();
 
     gl.disable(gl.BLEND);
   }
+
+
+
+
+
+
 
 
   render_handler_copy_temporal()
@@ -1659,6 +1665,9 @@ export class Renderer
     this.view_proj = new Matrix4().multiplyMatrices(scene.camera.projection, this.view);
     this.inverse_view_proj = this.view_proj.clone().invert();
 
+    // Save camera position for later use by the smoke shader
+    this.cameraPosition = scene.camera.get_position();
+
     if ( !this.prev_view_proj )
     {
       this.prev_view      = this.view.clone();
@@ -1681,16 +1690,19 @@ export class Renderer
     //   this.triggerSmoke = false;
     // }
     // Render smoke effect now if flagged:
-    if (this.triggerSmoke && this.smokeTransform) {
-      this.render_handler_smoke_at(this.smokeTransform);
-      this.triggerSmoke = false;
-    }
-
     //this.render_handler_smoke();
+
     this.render_handler_blit();
+    // TODO: Temporarily disabled smoke rendering.
+    // if (this.triggerSmoke && this.smokeTransform) {
+    //   this.render_handler_smoke_at(this.smokeTransform);
+    //   this.triggerSmoke = false;
+    // }
     this.render_handler_debug();
 
     this.prev_view      = this.view.clone();
+    // Save camera position for later use by the smoke shader
+    this.cameraPosition = scene.camera.get_position();
     this.prev_view_proj = this.view_proj.clone();
 
     scene.actors.forEach( 
