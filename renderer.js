@@ -1533,6 +1533,7 @@ export class Renderer
 //   }
   // Render smoke at a specific transform (position, rotation, scale)
   render_handler_smoke_at(transform) {
+    console.log("render_handler_smoke_at called");
     // Compute the inverse of the model transform.
     let invTransform = transform.clone().invert();
 
@@ -1553,6 +1554,7 @@ export class Renderer
 
     // Draw the quad.
     this.quad.draw();
+
     gl.disable(gl.BLEND);
   }
 
