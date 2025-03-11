@@ -1548,7 +1548,7 @@ export class Renderer
       u_iMouse: [ 0.0, 0.0 ],
       g_Model: transform.elements,
       g_ModelInv: invTransform.elements,
-      //u_ViewProj: this.view_proj.elements  // Pass the view-projection matrix here
+      u_ViewProj: this.view_proj.elements  // Pass the view-projection matrix here
     });
 
     // Draw the quad.
@@ -1653,8 +1653,8 @@ export class Renderer
       this.taa_jitter = new Vector3( 0, 0, 0 );
     }
 
-    this.view              = scene.camera.transform.clone().invert();
-    this.view_proj         = (new Matrix4).multiplyMatrices(scene.camera.projection, this.view);
+    this.view = scene.camera.transform.clone().invert();
+    this.view_proj = new Matrix4().multiplyMatrices(scene.camera.projection, this.view);
     this.inverse_view_proj = this.view_proj.clone().invert();
 
     if ( !this.prev_view_proj )
@@ -1674,10 +1674,16 @@ export class Renderer
     this.render_handler_copy_temporal();
     this.render_handler_post_processing();
     // ***** CONDICIONAL SMOKE EFFECT RENDERING *****
-    if (this.triggerSmoke) {
-      this.render_handler_smoke();
+    // if (this.triggerSmoke) {
+    //   this.render_handler_smoke();
+    //   this.triggerSmoke = false;
+    // }
+    // Render smoke effect now if flagged:
+    if (this.triggerSmoke && this.smokeTransform) {
+      this.render_handler_smoke_at(this.smokeTransform);
       this.triggerSmoke = false;
     }
+
     //this.render_handler_smoke();
     this.render_handler_blit();
     this.render_handler_debug();

@@ -682,7 +682,10 @@ async function main()
                     transform.multiply(scaleMat);
 
                     // Call the new smoke render method with the computed transform.
-                    renderer.render_handler_smoke_at(transform);
+                    // renderer.render_handler_smoke_at(transform);
+                    // Instead of rendering smoke immediately, store the transform and flag it:
+                    renderer.smokeTransform = transform;
+                    renderer.triggerSmoke = true;
                 }
             }
 
