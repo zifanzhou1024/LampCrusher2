@@ -522,10 +522,15 @@ export class Scene
     this.actors.set( actor.id, actor );
   }
 
-  remove( actor )
-  {
-    this.actors.delete( actor.id );
-    actor.id = 0;
+  remove(actor) {
+    // Remove actor from the internal map if it has an id.
+    if (actor.id !== undefined) {
+      this.actors.delete(actor.id);
+    }
+    // Only modify id if the actor is an instance of your custom Actor class.
+    if (actor instanceof Actor) {
+      actor.id = 0;
+    }
   }
 }
 
@@ -1007,6 +1012,28 @@ export class Renderer
       new GpuFragmentShader(kShaders.PS_Tonemapping),
       { g_HDRBuffer: this.render_buffers[ RenderBuffers.kTAA ] }
     );
+
+    // ***** ADD SMOKE SHADER  *****
+    // this.smokeShader = new GpuGraphicsPSO(
+    //     new GpuVertexShader(kShaders.VS_FullscreenQuad),
+    //     new GpuFragmentShader(kShaders.PS_Smoke),
+    //     {
+    //       u_iResolution: [ gl.canvas.width, gl.canvas.height ],
+    //       u_iTime: 0.0,
+    //       u_iMouse: [ 0.0, 0.0 ],  // Update with actual mouse coordinates if available.
+    //     }
+    // );
+    this.smokeShader = new GpuGraphicsPSO(
+        new GpuVertexShader(kShaders.VS_Smoke),
+        new GpuFragmentShader(kShaders.PS_Smoke),
+        {
+          u_iResolution: [ gl.canvas.width, gl.canvas.height ],
+          u_iTime: 0.0,
+          u_iMouse: [ 0.0, 0.0 ],
+        }
+    );
+
+
     this.blit            = new GpuGraphicsPSO(
       new GpuVertexShader(kShaders.VS_FullscreenQuad),
       new GpuFragmentShader(kShaders.PS_Blit),
@@ -1015,6 +1042,9 @@ export class Renderer
     this.frame_id        = 0;
     this.enable_taa      = true;
     this.enable_pcf      = true;
+
+    // ***** ADD SMOKE TRIGGER PROPERTY *****
+    this.triggerSmoke = false;
 
     this.debug_cube           = new DebugCube();
     this.debug_axes           = new DebugAxes();
@@ -1449,6 +1479,86 @@ export class Renderer
     this.quad.draw();
   }
 
+  // ***** ADD SMOKE RENDER HANDLER *****
+  render_handler_smoke()
+  {
+    // Bind to the default framebuffer (or to a dedicated buffer if desired)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+    // Enable blending for a natural, smoke‐like fade.
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    // Update uniforms for the smoke shader.
+    this.smokeShader.bind({
+      u_iResolution: [ gl.canvas.width, gl.canvas.height ],
+      u_iTime: performance.now() / 1000.0,
+      u_iMouse: [ 0.0, 0.0 ]  // Replace with your actual mouse coordinates if available.
+    });
+
+    // Render the fullscreen quad with the smoke effect.
+    this.quad.draw();
+
+    gl.disable(gl.BLEND);
+  }
+
+// // Render smoke at a specific transform (position, rotation, scale)
+//   render_handler_smoke_at(transform) {
+//     // Compute the inverse of the model transform.
+//     let invTransform = transform.clone().invert();
+//
+//     // Bind to the default framebuffer and set the viewport.
+//     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+//     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+//
+//     // Enable alpha blending for a natural, smoke‐like fade.
+//     gl.enable(gl.BLEND);
+//     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+//
+//     // Bind the smoke shader and pass the required uniforms.
+//     this.smokeShader.bind({
+//       u_iResolution: [ gl.canvas.width, gl.canvas.height ],
+//       u_iTime: performance.now() / 1000.0,
+//       u_iMouse: [ 0.0, 0.0 ],
+//       g_Model: transform.elements,
+//       g_ModelInv: invTransform.elements
+//     });
+//
+//     // Draw the fullscreen quad (the shader uses the model transforms to localize the effect).
+//     this.quad.draw();
+//
+//     // Disable blending.
+//     gl.disable(gl.BLEND);
+//   }
+  // Render smoke at a specific transform (position, rotation, scale)
+  render_handler_smoke_at(transform) {
+    console.log("render_handler_smoke_at called");
+    // Compute the inverse of the model transform.
+    let invTransform = transform.clone().invert();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    // Bind the smoke shader and pass the required uniforms.
+    this.smokeShader.bind({
+      u_iResolution: [ gl.canvas.width, gl.canvas.height ],
+      u_iTime: performance.now() / 1000.0,
+      u_iMouse: [ 0.0, 0.0 ],
+      g_Model: transform.elements,
+      g_ModelInv: invTransform.elements,
+      u_ViewProj: this.view_proj.elements  // Pass the view-projection matrix here
+    });
+
+    // Draw the quad.
+    this.quad.draw();
+
+    gl.disable(gl.BLEND);
+  }
+
+
   render_handler_copy_temporal()
   {
     gl.bindFramebuffer( gl.FRAMEBUFFER, this.accumulation_buffer );
@@ -1545,8 +1655,8 @@ export class Renderer
       this.taa_jitter = new Vector3( 0, 0, 0 );
     }
 
-    this.view              = scene.camera.transform.clone().invert();
-    this.view_proj         = (new Matrix4).multiplyMatrices(scene.camera.projection, this.view);
+    this.view = scene.camera.transform.clone().invert();
+    this.view_proj = new Matrix4().multiplyMatrices(scene.camera.projection, this.view);
     this.inverse_view_proj = this.view_proj.clone().invert();
 
     if ( !this.prev_view_proj )
@@ -1565,7 +1675,18 @@ export class Renderer
     this.render_handler_taa();
     this.render_handler_copy_temporal();
     this.render_handler_post_processing();
+    // ***** CONDICIONAL SMOKE EFFECT RENDERING *****
+    // if (this.triggerSmoke) {
+    //   this.render_handler_smoke();
+    //   this.triggerSmoke = false;
+    // }
+    // Render smoke effect now if flagged:
+    if (this.triggerSmoke && this.smokeTransform) {
+      this.render_handler_smoke_at(this.smokeTransform);
+      this.triggerSmoke = false;
+    }
 
+    //this.render_handler_smoke();
     this.render_handler_blit();
     this.render_handler_debug();
 
