@@ -1547,7 +1547,8 @@ export class Renderer
       u_iTime: performance.now() / 1000.0,
       u_iMouse: [ 0.0, 0.0 ],
       g_Model: transform.elements,
-      g_ModelInv: invTransform.elements
+      g_ModelInv: invTransform.elements,
+      //u_ViewProj: this.view_proj.elements  // Pass the view-projection matrix here
     });
 
     // Draw the quad.

@@ -734,12 +734,19 @@ void main() {
   attribute vec2 uv;
   uniform mat4 g_Model;       // Model transform for the smoke quad
   uniform mat4 u_ViewProj;    // View-projection transform
-  varying vec2 f_UV;
+  varying vec2 f_LocalUV;     // Local coordinates for smoke
   
   void main() {
-      // Transform the quad's vertex by the model and then the view-projection matrix.
-      gl_Position = u_ViewProj * g_Model * vec4(position, 1.0);
-      f_UV = uv;
+      // Transform the vertex into world space using g_Model.
+      vec4 worldPos = g_Model * vec4(position, 1.0);
+      
+      // For a quad centered at the origin, assume its corners in local space are (-1,-1) to (1,1).
+      // You can compute local UVs by dividing worldPos.xy by a chosen scale.
+      // Here we assume the quad was designed so that after applying g_Model the x,y coordinates are in a useful range.
+      // Alternatively, you can simply pass the attribute uv if that already represents local coordinates.
+      f_LocalUV = uv;  // If your quad's uv are already set to [0,1]
+      
+      gl_Position = u_ViewProj * worldPos;
   }
 `,
 
