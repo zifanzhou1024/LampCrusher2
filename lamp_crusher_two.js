@@ -224,20 +224,40 @@ async function main()
     // ----- Custom OBB Functions -----
     // Computes an oriented bounding box from an object.
     function getOBB(object, collisionScale = 1) {
-        let aabb = object.aabb;
+        const aabb = object.aabb;
+        // Get the AABB center in local space...
         let center = new THREE.Vector3();
         aabb.getCenter(center);
+        // ...and transform it into world space.
+        center.applyMatrix4(object.transform);
+
+        // Get the local size from the AABB.
         let size = new THREE.Vector3();
         aabb.getSize(size);
-        let halfSizes = size.multiplyScalar(0.5).multiplyScalar(collisionScale);
-        let m = object.transform;
-        let axes = [
+
+        // Extract the scale factors from the transform matrix.
+        const m = object.transform;
+        const scaleX = new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).length();
+        const scaleY = new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).length();
+        const scaleZ = new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).length();
+
+        // Compute the world half-sizes.
+        const halfSizes = new THREE.Vector3(
+            (size.x * scaleX) * 0.5 * collisionScale,
+            (size.y * scaleY) * 0.5 * collisionScale,
+            (size.z * scaleZ) * 0.5 * collisionScale,
+        );
+
+        // Get the axes from the transform (rotation component).
+        const axes = [
             new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
             new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).normalize(),
             new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).normalize()
         ];
+
         return { center, axes, halfSizes };
     }
+
 
     function halfProjection(obb, axis) {
         return obb.halfSizes.x * Math.abs(axis.dot(obb.axes[0])) +
@@ -636,14 +656,14 @@ async function main()
             for (let i = allLetters.length - 1; i >= 0; i--) {
                 const letter = allLetters[i];
                 const letterOBB = getOBB(letter, letterCollisionScale);
-                if (0 && obbIntersect(lampOBB, letterOBB)) {
+                if (obbIntersect(lampOBB, letterOBB)) { // Fixme: Disable collision
                     // If the lamp is above the letter, initiate squish.
                     if (lamp.get_position().y > letter.get_position().y + 0.5) {
                         if (!letter.squishing) {
                             letter.squishing = true;
                             letter.squishElapsed = 0;
                             letter.squishDuration = squishDuration;
-                            letter.originalScale = letter.get_scale();
+                            letter.originalScale = letter.get_scale().clone(); // Use clone() here.
                             score += 10;
                             health = Math.min(100, health + 10);
                         }
