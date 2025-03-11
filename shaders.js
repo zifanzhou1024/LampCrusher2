@@ -630,4 +630,117 @@ export const kShaders = {
       gl_FragColor = vec4( f_Color, 1.0 );
     }
   `,
+  'PS_Smoke': `
+precision mediump float;
+
+uniform vec2 u_iResolution;
+uniform float u_iTime;
+uniform vec2 u_iMouse;
+uniform mat4 g_Model;     // Model transformation for localizing the smoke
+uniform mat4 g_ModelInv;  // Precomputed inverse of g_Model
+
+// Helper: 2D rotation matrix.
+mat2 rot(float a) { 
+    return mat2(cos(a), sin(a), -sin(a), cos(a)); 
+}
+
+// A simple noise function (adapted from IQ’s noise).
+float noise(vec3 x) {
+    vec3 p = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    vec2 uv = (p.xy + vec2(37.0, 17.0) * p.z) + f.xy;
+    return fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453) * 2.0 - 1.0;
+}
+
+// Smoke density function with fbm-style accumulation.
+float smoke(vec3 p) {
+    vec3 q = 1.2 * p;
+    float f = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        q += u_iTime * vec3(0.17, -0.5, 0.0);
+        f += a * noise(q);
+        a *= 0.4;
+        q *= 2.1;
+    }
+    float noiseShape = 0.5 + 0.7 * max(p.y, 0.0) - 0.15 * length(p.xz);
+    return clamp(1.0 + noiseShape * f - length(p), 0.0, 1.0);
+}
+
+// Raymarching to accumulate smoke density.
+vec3 shading(vec3 ro, vec3 rd) {
+    vec3 ld = normalize(vec3(0.5, 1.0, -0.7));
+    const int nbStep = 30;
+    const float diam = 3.0;
+    float rayLength = diam / float(nbStep);
+    float start = length(ro) - diam / 2.0;
+    float end = start + diam;
+    float sumDen = 0.0;
+    float sumDif = 0.0;
+    
+    for (int i = 0; i < nbStep; i++) {
+        float d = end - float(i) * rayLength;
+        if (d < start) break;
+        vec3 p = ro + d * rd;
+        if (dot(p, p) > diam * diam) break;
+        float den = smoke(p);
+        sumDen += den;
+        if (den > 0.02) {
+            sumDif += max(0.0, den - smoke(p + ld * 0.17));
+        }
+    }
+    
+    vec3 lightCol = vec3(0.95, 0.75, 0.3);
+    float light = 10.0 * pow(max(0.0, dot(rd, ld)), 10.0);
+    vec3 col = 0.01 * light * lightCol;
+    col += 0.4 * sumDen * rayLength * vec3(0.8, 0.9, 1.0); // ambient term
+    col += 1.3 * sumDif * rayLength * lightCol;             // diffuse term
+    return col;
+}
+
+void main() {
+    // Dummy usage to ensure g_Model stays active.
+    vec4 dummy = g_Model * vec4(0.0, 0.0, 0.0, 1.0);
+    vec2 fragCoord = gl_FragCoord.xy;
+    vec2 uv = (fragCoord - u_iResolution * 0.5) / u_iResolution.y;
+    vec3 rd = normalize(vec3(uv, -1.07));
+    
+    // Rotate camera based on mouse input.
+    vec2 ang = u_iMouse / u_iResolution;
+    float yaw = 7.0 * ang.x;
+    float pitch = ang.y;
+    
+    vec3 camPos = vec3(0.0, 0.3, 3.5);
+    camPos.yz *= rot(pitch);
+    camPos.zx *= rot(yaw);
+    rd.yz *= rot(pitch);
+    rd.zx *= rot(yaw);
+    
+    // Transform the camera position and ray direction into the smoke's local space.
+    vec3 localCamPos = (g_ModelInv * vec4(camPos, 1.0)).xyz;
+    vec3 localRd = normalize(mat3(g_ModelInv) * rd);
+    
+    vec3 col = shading(localCamPos, localRd);
+    // Apply gamma correction.
+    col = pow(col, vec3(1.0/2.2));
+    gl_FragColor = vec4(col, 1.0);
+}
+`,
+  'VS_Smoke': `
+  precision mediump float;
+  
+  attribute vec3 position;
+  attribute vec2 uv;
+  uniform mat4 g_Model;       // Model transform for the smoke quad
+  uniform mat4 u_ViewProj;    // View-projection transform
+  varying vec2 f_UV;
+  
+  void main() {
+      // Transform the quad's vertex by the model and then the view-projection matrix.
+      gl_Position = u_ViewProj * g_Model * vec4(position, 1.0);
+      f_UV = uv;
+  }
+`,
+
 }

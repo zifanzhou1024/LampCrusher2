@@ -662,6 +662,27 @@ async function main()
             if (lampIsJumping) {
                 if (lamp.is_grounded()) {
                     lampIsJumping = false;
+                    // scene.add(points);
+                    // spawnParticlesAt(lamp.get_position());
+                    // renderer.triggerSmoke = true;
+
+                    // Create a transformation matrix to position the smoke where the lamp landed.
+                    const pos = lamp.get_position();
+
+                    // Start with a translation to the lamp's position.
+                    let transform = new Matrix4().makeTranslation(pos.x, pos.y, pos.z);
+
+                    // Rotate the quad so that it lies flat on the ground (adjust rotation as needed).
+                    const rot = new Euler(-Math.PI / 2, 0, 0, 'XYZ');
+                    const rotationMat = new Matrix4().makeRotationFromEuler(rot);
+                    transform.multiply(rotationMat);
+
+                    // Scale the quad to an appropriate size (adjust scale factors as desired).
+                    const scaleMat = new Matrix4().makeScale(10, 10, 10);
+                    transform.multiply(scaleMat);
+
+                    // Call the new smoke render method with the computed transform.
+                    renderer.render_handler_smoke_at(transform);
                 }
             }
 
