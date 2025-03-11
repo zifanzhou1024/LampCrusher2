@@ -549,6 +549,33 @@ async function main()
         }
         return { minX, maxX, minZ, maxZ };
     }
+    function resolveCollisionMTV(lampOBB, letterOBB) {
+        // Compute the XZ bounds for each OBB.
+        const lampBounds = getXZBounds(lampOBB);
+        const letterBounds = getXZBounds(letterOBB);
+
+        // Compute the centers.
+        const lampCenterX = (lampBounds.minX + lampBounds.maxX) / 2;
+        const lampCenterZ = (lampBounds.minZ + lampBounds.maxZ) / 2;
+        const letterCenterX = (letterBounds.minX + letterBounds.maxX) / 2;
+        const letterCenterZ = (letterBounds.minZ + letterBounds.maxZ) / 2;
+
+        // Compute overlap along X and Z.
+        const overlapX = Math.min(lampBounds.maxX, letterBounds.maxX) - Math.max(lampBounds.minX, letterBounds.minX);
+        const overlapZ = Math.min(lampBounds.maxZ, letterBounds.maxZ) - Math.max(lampBounds.minZ, letterBounds.minZ);
+
+        // Choose the axis with the least penetration.
+        if (overlapX < overlapZ) {
+            // If lamp's center is to the left of letter's center, push left; otherwise push right.
+            const pushX = lampCenterX < letterCenterX ? -overlapX : overlapX;
+            return new Vector3(pushX, 0, 0);
+        } else {
+            // For Z axis.
+            const pushZ = lampCenterZ < letterCenterZ ? -overlapZ : overlapZ;
+            return new Vector3(0, 0, pushZ);
+        }
+    }
+
 
     // ----- Animation Loop -----
     function animate(time) {
@@ -665,6 +692,7 @@ async function main()
             }
 
             // ----- Lamp-Letter Collision Handling -----
+// ----- Lamp-Letter Collision Handling -----
             const lampOBB = getOBB(lamp, lampCollisionScale);
             const allLetters = staticLetters.concat(fallingLetters);
 
@@ -673,70 +701,41 @@ async function main()
                 const letterOBB = getOBB(letter, letterCollisionScale);
 
                 if (obbIntersect(lampOBB, letterOBB)) {
-                    // Check if both lamp and letter are on the ground.
+                    // Determine if both lamp and letter are on the ground.
                     const lampGrounded = lamp.is_grounded();
                     const letterGrounded = Math.abs(letter.get_position().y) < 0.1; // assume letter rests at y ~ 0
 
                     if (lampGrounded && letterGrounded) {
-                        // Both are on the ground.
-                        // Resolve horizontal (XZ) overlap so the lamp slides along the letter.
-                        const lampBounds = getXZBounds(lampOBB);
-                        const letterBounds = getXZBounds(letterOBB);
+                        // Both are on the ground. Compute the MTV on the XZ plane.
+                        const correction = resolveCollisionMTV(lampOBB, letterOBB);
+                        // Update the lamp's position (create a new vector and call set_position).
+                        const newPos = lamp.get_position().clone().add(correction);
+                        lamp.set_position(newPos);
 
-                        const overlapX = Math.min(lampBounds.maxX, letterBounds.maxX) - Math.max(lampBounds.minX, letterBounds.minX);
-                        const overlapZ = Math.min(lampBounds.maxZ, letterBounds.maxZ) - Math.max(lampBounds.minZ, letterBounds.minZ);
-
-                        if (overlapX > 0 && overlapZ > 0) {
-                            // Determine the axis with the least penetration.
-                            if (overlapX < overlapZ) {
-                                // Resolve along X. Push lamp left or right.
-                                const pushX = overlapX;
-                                const direction = lamp.get_position().x < letterOBB.center.x ? -1 : 1;
-                                lamp.get_position().x += direction * pushX;
-                            } else {
-                                // Resolve along Z. Push lamp forward or backward.
-                                const pushZ = overlapZ;
-                                const direction = lamp.get_position().z < letterOBB.center.z ? -1 : 1;
-                                lamp.get_position().z += direction * pushZ;
-                            }
-                        }
+                        // After correcting the position, update lampOBB for further checks.
+                        // (Optionally, you can re-compute lampOBB here if needed.)
                     } else {
-                        // Lamp is airborne (or letter isn't exactly on ground).
-                        // If the lamp is sufficiently above the letter, trigger a squish.
+                        // If the lamp is airborne:
                         if (lamp.get_position().y > letter.get_position().y + 0.5) {
                             if (!letter.squishing) {
                                 letter.squishing = true;
                                 letter.squishElapsed = 0;
                                 letter.squishDuration = squishDuration;
-                                letter.originalScale = letter.get_scale().clone(); // clone so the original isn't modified
+                                letter.originalScale = letter.get_scale().clone();
                                 score += 10;
                                 health = Math.min(100, health + 10);
                             }
                         } else {
-                            // Otherwise, resolve like a ground collision (only horizontal correction).
-                            const lampBounds = getXZBounds(lampOBB);
-                            const letterBounds = getXZBounds(letterOBB);
-
-                            const overlapX = Math.min(lampBounds.maxX, letterBounds.maxX) - Math.max(lampBounds.minX, letterBounds.minX);
-                            const overlapZ = Math.min(lampBounds.maxZ, letterBounds.maxZ) - Math.max(lampBounds.minZ, letterBounds.minZ);
-
-                            if (overlapX > 0 && overlapZ > 0) {
-                                if (overlapX < overlapZ) {
-                                    const pushX = overlapX;
-                                    const direction = lamp.get_position().x < letterOBB.center.x ? -1 : 1;
-                                    lamp.get_position().x += direction * pushX;
-                                } else {
-                                    const pushZ = overlapZ;
-                                    const direction = lamp.get_position().z < letterOBB.center.z ? -1 : 1;
-                                    lamp.get_position().z += direction * pushZ;
-                                }
-                            }
+                            // Otherwise, if airborne but not far enough above, use MTV resolution as well.
+                            const correction = resolveCollisionMTV(lampOBB, letterOBB);
+                            const newPos = lamp.get_position().clone().add(correction);
+                            lamp.set_position(newPos);
                         }
                     }
-
-                    // (Optionally, update lampOBB after adjusting the lamp's position.)
+                    // (Optionally update lampOBB after position change.)
                 }
             }
+
 
 
         }
