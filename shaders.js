@@ -643,6 +643,7 @@ uniform mat4 g_ModelInv;  // Precomputed inverse of g_Model
 // New uniforms to pass camera info
 uniform vec3 u_CamPos;
 uniform mat4 u_InverseViewProj;
+uniform mat4 u_ViewProj;
 
 
 
@@ -732,7 +733,7 @@ void main() {
     gl_FragColor = vec4(col, 1.0);
 }
 `,
-  'VS_Smoke': `
+      'VS_Smoke': `
   precision mediump float;
   
   attribute vec3 position;
