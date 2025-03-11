@@ -224,20 +224,40 @@ async function main()
     // ----- Custom OBB Functions -----
     // Computes an oriented bounding box from an object.
     function getOBB(object, collisionScale = 1) {
-        let aabb = object.aabb;
+        const aabb = object.aabb;
+        // Get the AABB center in local space...
         let center = new THREE.Vector3();
         aabb.getCenter(center);
+        // ...and transform it into world space.
+        center.applyMatrix4(object.transform);
+
+        // Get the local size from the AABB.
         let size = new THREE.Vector3();
         aabb.getSize(size);
-        let halfSizes = size.multiplyScalar(0.5).multiplyScalar(collisionScale);
-        let m = object.transform;
-        let axes = [
+
+        // Extract the scale factors from the transform matrix.
+        const m = object.transform;
+        const scaleX = new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).length();
+        const scaleY = new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).length();
+        const scaleZ = new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).length();
+
+        // Compute the world half-sizes.
+        const halfSizes = new THREE.Vector3(
+            (size.x * scaleX) * 0.5 * collisionScale,
+            (size.y * scaleY) * 0.5 * collisionScale,
+            (size.z * scaleZ) * 0.5 * collisionScale,
+        );
+
+        // Get the axes from the transform (rotation component).
+        const axes = [
             new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]).normalize(),
             new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]).normalize(),
             new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10]).normalize()
         ];
+
         return { center, axes, halfSizes };
     }
+
 
     function halfProjection(obb, axis) {
         return obb.halfSizes.x * Math.abs(axis.dot(obb.axes[0])) +
@@ -516,6 +536,46 @@ async function main()
     /**
     * --------------------------------------------------------------------------
     */
+    // Helper: compute a 2D AABB (on XZ plane) from an OBB.
+    function getXZBounds(obb) {
+        const corners = computeOBBCorners(obb);
+        let minX = Infinity, maxX = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+        for (let corner of corners) {
+            minX = Math.min(minX, corner.x);
+            maxX = Math.max(maxX, corner.x);
+            minZ = Math.min(minZ, corner.z);
+            maxZ = Math.max(maxZ, corner.z);
+        }
+        return { minX, maxX, minZ, maxZ };
+    }
+    function resolveCollisionMTV(lampOBB, letterOBB) {
+        // Compute the XZ bounds for each OBB.
+        const lampBounds = getXZBounds(lampOBB);
+        const letterBounds = getXZBounds(letterOBB);
+
+        // Compute the centers.
+        const lampCenterX = (lampBounds.minX + lampBounds.maxX) / 2;
+        const lampCenterZ = (lampBounds.minZ + lampBounds.maxZ) / 2;
+        const letterCenterX = (letterBounds.minX + letterBounds.maxX) / 2;
+        const letterCenterZ = (letterBounds.minZ + letterBounds.maxZ) / 2;
+
+        // Compute overlap along X and Z.
+        const overlapX = Math.min(lampBounds.maxX, letterBounds.maxX) - Math.max(lampBounds.minX, letterBounds.minX);
+        const overlapZ = Math.min(lampBounds.maxZ, letterBounds.maxZ) - Math.max(lampBounds.minZ, letterBounds.minZ);
+
+        // Choose the axis with the least penetration.
+        if (overlapX < overlapZ) {
+            // If lamp's center is to the left of letter's center, push left; otherwise push right.
+            const pushX = lampCenterX < letterCenterX ? -overlapX : overlapX;
+            return new Vector3(pushX, 0, 0);
+        } else {
+            // For Z axis.
+            const pushZ = lampCenterZ < letterCenterZ ? -overlapZ : overlapZ;
+            return new Vector3(0, 0, pushZ);
+        }
+    }
+
 
     // ----- Animation Loop -----
     function animate(time) {
@@ -571,6 +631,7 @@ async function main()
 
                 if (move.lengthSq() > 0) {
                     move.normalize();
+                    let prevLampPos = lamp.get_position().clone();
                     const pos = lamp.get_position().addScaledVector(move, speed);
                     lamp.set_position(pos);
 
@@ -631,47 +692,52 @@ async function main()
             }
 
             // ----- Lamp-Letter Collision Handling -----
+// ----- Lamp-Letter Collision Handling -----
             const lampOBB = getOBB(lamp, lampCollisionScale);
             const allLetters = staticLetters.concat(fallingLetters);
+
             for (let i = allLetters.length - 1; i >= 0; i--) {
                 const letter = allLetters[i];
                 const letterOBB = getOBB(letter, letterCollisionScale);
-                if (0 && obbIntersect(lampOBB, letterOBB)) {
-                    // If the lamp is above the letter, initiate squish.
-                    if (lamp.get_position().y > letter.get_position().y + 0.5) {
-                        if (!letter.squishing) {
-                            letter.squishing = true;
-                            letter.squishElapsed = 0;
-                            letter.squishDuration = squishDuration;
-                            letter.originalScale = letter.get_scale();
-                            score += 10;
-                            health = Math.min(100, health + 10);
-                        }
+
+                if (obbIntersect(lampOBB, letterOBB)) {
+                    // Determine if both lamp and letter are on the ground.
+                    const lampGrounded = lamp.is_grounded();
+                    const letterGrounded = Math.abs(letter.get_position().y) < 0.1; // assume letter rests at y ~ 0
+
+                    if (lampGrounded && letterGrounded) {
+                        // Both are on the ground. Compute the MTV on the XZ plane.
+                        const correction = resolveCollisionMTV(lampOBB, letterOBB);
+                        // Update the lamp's position (create a new vector and call set_position).
+                        const newPos = lamp.get_position().clone().add(correction);
+                        lamp.set_position(newPos);
+
+                        // After correcting the position, update lampOBB for further checks.
+                        // (Optionally, you can re-compute lampOBB here if needed.)
                     } else {
-                        // Otherwise, push them apart horizontally
-                        let diff = new THREE.Vector3(
-                            lamp.get_position().x - letter.get_position().x,
-                            0,
-                            lamp.get_position().z - letter.get_position().z
-                        );
-                        if (diff.length() > 0.001) {
-                            diff.normalize();
-                            let attempts = 0;
-                            while (
-                                obbIntersect(
-                                    getOBB(lamp, lampCollisionScale),
-                                    letterOBB
-                                ) &&
-                                attempts < 10
-                                ) {
-                                lamp.get_position().x += diff.x * 0.05;
-                                lamp.get_position().z += diff.z * 0.05;
-                                attempts++;
+                        // If the lamp is airborne:
+                        if (lamp.get_position().y > letter.get_position().y + 0.5) {
+                            if (!letter.squishing) {
+                                letter.squishing = true;
+                                letter.squishElapsed = 0;
+                                letter.squishDuration = squishDuration;
+                                letter.originalScale = letter.get_scale().clone();
+                                score += 10;
+                                health = Math.min(100, health + 10);
                             }
+                        } else {
+                            // Otherwise, if airborne but not far enough above, use MTV resolution as well.
+                            const correction = resolveCollisionMTV(lampOBB, letterOBB);
+                            const newPos = lamp.get_position().clone().add(correction);
+                            lamp.set_position(newPos);
                         }
                     }
+                    // (Optionally update lampOBB after position change.)
                 }
             }
+
+
+
         }
 
         // Process squishing animations for both static and falling letters.
