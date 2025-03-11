@@ -701,7 +701,7 @@ vec3 shading(vec3 ro, vec3 rd) {
 
 void main() {
     // Dummy usage to ensure g_Model stays active.
-    vec4 dummy = g_Model * vec4(0.0, 0.0, 0.0, 1.0);
+    //vec4 dummy = g_Model * vec4(0.0, 0.0, 0.0, 1.0);
     vec2 fragCoord = gl_FragCoord.xy;
     vec2 uv = (fragCoord - u_iResolution * 0.5) / u_iResolution.y;
     vec3 rd = normalize(vec3(uv, -1.07));

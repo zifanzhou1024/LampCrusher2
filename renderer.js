@@ -1681,13 +1681,14 @@ export class Renderer
     //   this.triggerSmoke = false;
     // }
     // Render smoke effect now if flagged:
+
+
+    //this.render_handler_smoke();
+    this.render_handler_blit();
     if (this.triggerSmoke && this.smokeTransform) {
       this.render_handler_smoke_at(this.smokeTransform);
       this.triggerSmoke = false;
     }
-
-    //this.render_handler_smoke();
-    this.render_handler_blit();
     this.render_handler_debug();
 
     this.prev_view      = this.view.clone();
