@@ -155,8 +155,9 @@ export class AnimTrack
 {
   constructor( name, times, values, type )
   {
-    this.name   = name;
-    this.times  = times;
+    this.name     = name;
+    this.max_time = Math.max( ...times );
+    this.times    = times;
     if ( type === 'vector' )
     {
       const array_to_vec3 = ( arr ) => Array.from(
@@ -199,15 +200,16 @@ export class AnimClip
   {
     const track_get_a_v0_v1 = ( track ) =>
     {
-      let i = 0;
-      while ( i < track.times.length - 1 && track.times[ i + 1 ] <= t )
+      const time = t * track.max_time;
+      let   i    = 0;
+      while ( i < track.times.length - 1 && track.times[ i + 1 ] <= time )
       {
         i++;
       }
 
       const t0 = track.times[ i + 0 ];
       const t1 = track.times[ i + 1 ] || t0;
-      const a  = ( t1 - t0 ) > 0 ? ( t - t0 ) / ( t1 - t0 ) : 0.0;
+      const a  = ( t1 - t0 ) > 0 ? ( time - t0 ) / ( t1 - t0 ) : 0.0;
 
       const v0 = track.values[ i + 0 ];
       const v1 = track.values[ i + 1 ] || v0;
@@ -300,7 +302,14 @@ export class Skeleton
     {
       const bone          = this.bones[ i ];
       bone.prev_transform = bone.transform.clone();
-      bone.transform      = anim_clip.get_bone_transform( i, t ); // bone.bind_pose.clone(); 
+      if ( anim_clip == null )
+      {
+        bone.transform    = this.bind_matrices[ i ].clone();
+      }
+      else
+      {
+        bone.transform    = anim_clip.get_bone_transform( i, t );
+      }
     }
 
     this.prev_bone_matrices = this.bone_matrices;
@@ -423,6 +432,8 @@ export class SkinnedModel extends Model
     super( name, skinned_subsets );
     this.skeleton   = skeleton
     this.animations = animations;
+    this.anim       = null;
+    this.t          = 0.0;
 
     let min = new Vector3(  Infinity,  Infinity,  Infinity );
     let max = new Vector3( -Infinity, -Infinity, -Infinity );
@@ -674,6 +685,7 @@ export function load_gltf_model( asset, transform = new Matrix4() )
         }
       }
 
+      console.log( gltf );
       const skeleton = traverse_bones( gltf.scene );
 
       const meshes  = flatten_scene( gltf.scene );
@@ -745,6 +757,10 @@ export function load_gltf_model( asset, transform = new Matrix4() )
           }
           else
           {
+            if ( skeleton )
+            {
+              return null;
+            }
             return new ModelSubset( mesh.name, vertices, indices, mesh.matrixWorld.clone().premultiply( transform ) );
           }
         }

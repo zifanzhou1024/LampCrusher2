@@ -28,7 +28,9 @@ class Lamp extends Actor
 {
     constructor(model, material)
     {
-        super(model, material);
+        super(model, material, 0.2);
+        this.jump_t = 0.0;
+        this.walk_t = 0.0;
     }
 }
 
@@ -158,7 +160,7 @@ async function main()
       'r': await load_gltf_model('pixar_r.glb'),
     }
 
-    const lamp = new Actor(lampModel, lampMaterial, 0.2);
+    const lamp = new Lamp(lampModel, lampMaterial);
     lamp.set_position_euler_scale(new Vector3(0, 0, -10), new Euler(0, -Math.PI / 2, 0, 'XYZ'), new Vector3(1, 1, 1));
     scene.add(lamp);
 
@@ -311,39 +313,6 @@ async function main()
         }
         return corners;
     }
-
-    // Create a line-segment helper (wireframe) for the given OBB.
-    /*
-    function createOBBHelper(obb, color) {
-        const corners = computeOBBCorners(obb);
-        // Based on the order of the nested loops in computeOBBCorners,
-        // the indices are as follows:
-        // 0: (-1,-1,-1), 1: (-1,-1, 1), 2: (-1, 1,-1), 3: (-1, 1, 1),
-        // 4: ( 1,-1,-1), 5: ( 1,-1, 1), 6: ( 1, 1,-1), 7: ( 1, 1, 1)
-        const edges = [
-            [0,1],[1,3],[3,2],[2,0],  // bottom and top faces (for dx = -1)
-            [4,5],[5,7],[7,6],[6,4],  // bottom and top faces (for dx = 1)
-            [0,4],[1,5],[2,6],[3,7]   // connecting edges
-        ];
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(edges.length * 2 * 3);
-        let ptr = 0;
-        for (let edge of edges) {
-            const a = corners[edge[0]];
-            const b = corners[edge[1]];
-            positions[ptr++] = a.x;
-            positions[ptr++] = a.y;
-            positions[ptr++] = a.z;
-            positions[ptr++] = b.x;
-            positions[ptr++] = b.y;
-            positions[ptr++] = b.z;
-        }
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const material = new THREE.LineBasicMaterial({ color: color });
-        const lineSegments = new THREE.LineSegments(geometry, material);
-        return lineSegments;
-    }
-    */
 
     // Initial load of static letters
     spawnStaticLetters();
@@ -629,7 +598,10 @@ async function main()
                 if (keyStates['a']) move.sub(right);
                 if (keyStates['d']) move.add(right);
 
+                const kWalkAnimSpeed = 1.5;
                 if (move.lengthSq() > 0) {
+                    lamp.walk_t = ( lamp.walk_t + kWalkAnimSpeed * dt ) % 1;
+                    console.log( `${lamp.walk_t}` );
                     move.normalize();
                     let prevLampPos = lamp.get_position().clone();
                     const pos = lamp.get_position().addScaledVector(move, speed);
@@ -645,21 +617,38 @@ async function main()
                     const rotation = lamp.get_euler();
                     rotation.y += angleDiff * rotationSpeed;
                     lamp.set_euler(rotation);
+                } else if (lamp.walk_t > 0.0 && lamp.walk_t < 1.0) {
+                    lamp.walk_t = Math.min( lamp.walk_t + kWalkAnimSpeed * dt, 1.0 );
                 }
 
                 // Jump when space is pressed.
                 if (keyStates[' '] && !lampIsJumping) {
                     lampIsJumping = true;
+                    lamp.jump_t   = 0.0;
                     lamp.add_force(new Vector3(0.0, jumpStrength, 0.0));
                 }
             }
             // In the intro state, auto-jump for idle animation.
             if (currentGameMode === 'intro' && !lampIsJumping) {
                 lampIsJumping = true;
+                lamp.jump_t   = 0.0;
                 lamp.add_force(new Vector3(0.0, jumpStrength, 0.0));
             }
             // Process jumping
+            const clamp = ( x, min, max ) => Math.min( Math.max( x, min ), max );
             if (lampIsJumping) {
+                if ( lamp.get_velocity().y > 0.01 )
+                {
+                  const kJumpAnimSpeed = 1.5;
+                  const jump_dt        = dt * kJumpAnimSpeed;
+                  lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 0.5 );
+                }
+                else
+                {
+                  const kJumpAnimSpeed = 0.2;
+                  const jump_dt        = dt * kJumpAnimSpeed;
+                  lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 0.63 );
+                }
                 if (lamp.is_grounded()) {
                     lampIsJumping = false;
                     console.log("Lamp landed!"); // Debug message
@@ -692,6 +681,19 @@ async function main()
                     renderer.smokeTransform = transform;
                     renderer.triggerSmoke = true;
                 }
+            } else {
+              const kJumpAnimSpeed = 1.0;
+              const jump_dt        = dt * kJumpAnimSpeed;
+              lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 1.0 );
+            }
+            if ( !lamp.is_grounded() || lamp.walk_t <= 0.0 || lamp.walk_t >= 1.0 )
+            {
+              lamp.walk_t = 0.0;
+              lamp.update_anim( "Jump", lamp.jump_t );
+            }
+            else
+            {
+              lamp.update_anim( "Walk", lamp.walk_t );
             }
 
             // ----- Camera Setup -----
@@ -830,7 +832,6 @@ async function main()
         staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
         fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
 
-        lamp.update_anim( "Jump",  Math.sin( time * 4.0 ) * 0.5 + 0.5 );
         lamp.mesh.skeleton.draw_debug( renderer, lamp.transform );
 
         renderer.submit(scene);
