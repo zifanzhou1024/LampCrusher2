@@ -1441,6 +1441,7 @@ export class Renderer
       return;
     }
 
+    const sky_color = new Vector3( 0.403, 0.538, 1.768 ).multiplyScalar( scene.directional_light.luminance / 7.0 );
     this.standard_brdf.bind( 
       {
         g_InverseViewProj:              this.inverse_view_proj.elements,
@@ -1456,7 +1457,7 @@ export class Renderer
 
         g_DirectionalLightViewProj:     this.directional_light_view_proj.elements,
         g_WSCameraPosition:             [ camera_center.x, camera_center.y, camera_center.z ],
-        g_SkyColor:                     [ 0.403, 0.538, 1.768 ],
+        g_SkyColor:                     sky_color.toArray(),
         g_EnablePCF:                    1,
       }
     );

@@ -54,7 +54,7 @@ async function main()
     let pKeyPressed = false;
 
     // Toggle for persistent bounding boxes (via 'b')
-    let persistentBB = false;
+    let debugDraw = false;
 
     // Initialize UI elements.
     const { startMenu } = initializeUI();
@@ -68,7 +68,7 @@ async function main()
     // Camera control variables (for third-person view)
     let cameraRotationX = currentGameMode === 'intro' ? 0 : -0.2;
     let cameraRotationY = 0;
-    let cameraDistance = 15;
+    let cameraDistance = 10;
 
     // ----- Three.js Scene Setup -----
     const renderer = new Renderer();
@@ -85,8 +85,8 @@ async function main()
         keyStates[key] = true;
         // Toggle persistent bounding boxes when 'b' is pressed.
         if (key === 'b') {
-            persistentBB = !persistentBB;
-            console.log("Persistent bounding boxes toggled:", persistentBB);
+            debugDraw = !debugDraw;
+            console.log("Debug draw toggled:", debugDraw);
         }
         // Only allow toggling views outside the intro state.
         if (key === 'v' && !vKeyPressed && currentGameMode !== 'intro') {
@@ -161,7 +161,7 @@ async function main()
     }
 
     const lamp = new Lamp(lampModel, lampMaterial);
-    lamp.set_position_euler_scale(new Vector3(0, 0, -10), new Euler(0, -Math.PI / 2, 0, 'XYZ'), new Vector3(1, 1, 1));
+    lamp.set_position_euler_scale(new Vector3(-3, 0, 5), new Euler(0, -Math.PI / 2, 0, 'XYZ'), new Vector3(1, 1, 1));
     scene.add(lamp);
 
     scene.spot_light = new SpotLight(
@@ -323,9 +323,9 @@ async function main()
         if (!gameStarted || gameOver) return;
         const letters = ['p', 'i', 'x', 'a', 'r'];
         const randomLetter = letters[Math.floor(Math.random() * letters.length)];
-        const posX = Math.random() * 20 - 10;
-        const posY = 20;
-        const posZ = Math.random() * 20 - 10;
+        const posX = Math.random() * 30 - 15;
+        const posY = 30;
+        const posZ = Math.random() * 30 - 15;
 
         const actor = new Letter(letterModels[randomLetter], letterMaterial);
         actor.set_position(new Vector3(posX, posY, posZ));
@@ -385,7 +385,7 @@ async function main()
         updateUI(health, score, 0);
 
         // Restore ambient light to original intensity for the intro
-        // ambientLight.intensity = 1.5;
+        scene.directional_light.luminance = 7;
 
         // Remove any falling letters from the scene
         fallingLetters.forEach(letter => scene.remove(letter));
@@ -568,7 +568,7 @@ async function main()
             updateUI(health, score, elapsedTime);
 
             // Dim ambient light as health decreases
-            // ambientLight.intensity = (health / 100) * 0.5;
+            scene.directional_light.luminance = Math.min( ( health / 100 ) * 7, 7 );
 
             // Spawn letters at intervals
             letterSpawnTimer += dt;
@@ -579,6 +579,8 @@ async function main()
                 currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
             }
         }
+
+        const clamp = ( x, min, max ) => Math.min( Math.max( x, min ), max );
 
         // ----- Lamp Movement, Jumping, and Rotation -----
         if (lamp) {
@@ -601,7 +603,6 @@ async function main()
                 const kWalkAnimSpeed = 1.5;
                 if (move.lengthSq() > 0) {
                     lamp.walk_t = ( lamp.walk_t + kWalkAnimSpeed * dt ) % 1;
-                    console.log( `${lamp.walk_t}` );
                     move.normalize();
                     let prevLampPos = lamp.get_position().clone();
                     const pos = lamp.get_position().addScaledVector(move, speed);
@@ -618,7 +619,13 @@ async function main()
                     rotation.y += angleDiff * rotationSpeed;
                     lamp.set_euler(rotation);
                 } else if (lamp.walk_t > 0.0 && lamp.walk_t < 1.0) {
-                    lamp.walk_t = Math.min( lamp.walk_t + kWalkAnimSpeed * dt, 1.0 );
+                    let walk_dt = kWalkAnimSpeed * dt;
+                    // Prevent unnecessary step when obviously not started.
+                    if (lamp.walk_t < 0.4)
+                    {
+                      walk_dt *= -1.0;
+                    }
+                    lamp.walk_t   = clamp( lamp.walk_t + walk_dt, 0.0, 1.0 );
                 }
 
                 // Jump when space is pressed.
@@ -629,13 +636,12 @@ async function main()
                 }
             }
             // In the intro state, auto-jump for idle animation.
-            if (currentGameMode === 'intro' && !lampIsJumping) {
+            if (currentGameMode === 'intro' && !lampIsJumping && (lamp.jump_t >= 1.0 || lamp.jump_t <= 0.0)) {
                 lampIsJumping = true;
                 lamp.jump_t   = 0.0;
-                lamp.add_force(new Vector3(0.0, jumpStrength, 0.0));
+                lamp.add_force(new Vector3(0.0, jumpStrength * 2, 0.0));
             }
             // Process jumping
-            const clamp = ( x, min, max ) => Math.min( Math.max( x, min ), max );
             if (lampIsJumping) {
                 if ( lamp.get_velocity().y > 0.01 )
                 {
@@ -686,6 +692,7 @@ async function main()
               const jump_dt        = dt * kJumpAnimSpeed;
               lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 1.0 );
             }
+
             if ( !lamp.is_grounded() || lamp.walk_t <= 0.0 || lamp.walk_t >= 1.0 )
             {
               lamp.walk_t = 0.0;
@@ -723,7 +730,6 @@ async function main()
             }
 
             // ----- Lamp-Letter Collision Handling -----
-// ----- Lamp-Letter Collision Handling -----
             const lampOBB = getOBB(lamp, lampCollisionScale);
             const allLetters = staticLetters.concat(fallingLetters);
 
@@ -747,14 +753,14 @@ async function main()
                         // (Optionally, you can re-compute lampOBB here if needed.)
                     } else {
                         // If the lamp is airborne:
-                        if (lamp.get_position().y > letter.get_position().y + 0.5) {
+                        if (lamp.get_position().y > letter.get_position().y + 0.5 && lamp.get_velocity().y < 0.0) {
                             if (!letter.squishing) {
                                 letter.squishing = true;
                                 letter.squishElapsed = 0;
                                 letter.squishDuration = squishDuration;
                                 letter.originalScale = letter.get_scale().clone();
                                 score += 10;
-                                health = Math.min(100, health + 10);
+                                health = health + 40;
                             }
                         } else {
                             // Otherwise, if airborne but not far enough above, use MTV resolution as well.
@@ -779,7 +785,9 @@ async function main()
                     letter.squishElapsed += dt;
                     let progress = letter.squishElapsed / letter.squishDuration;
                     if (progress > 1) progress = 1;
-                    letter.get_scale().y = letter.originalScale.y * (1 - 0.9 * progress);
+                    const scale = letter.get_scale();
+                    scale.y = letter.originalScale.y * (1 - 0.9 * progress);
+                    letter.set_scale(scale);
                     if (progress >= 1) {
                         scene.remove(letter);
                         letterArray.splice(i, 1);
@@ -794,45 +802,18 @@ async function main()
         updateParticles();
         physics.fixed_update( scene, time );
 
-        // -------- Bounding Box Visualization --------
-        // Draw the bounding boxes if the game is paused (via 'p') or if persistent mode is enabled (toggled via 'b').
-        /*
-        if (healthDecreasePaused && persistentBB) {
-            // Remove any existing helpers
-            boundingBoxHelpers.forEach(helper => scene.remove(helper));
-            boundingBoxHelpers = [];
-            // Create new helpers using our OBB (not the axis-aligned BoxHelper).
-            if (lamp) {
-                let obb = getOBB(lamp, lampCollisionScale);
-                let helper = createOBBHelper(obb, 0xff0000);
-                scene.add(helper);
-                boundingBoxHelpers.push(helper);
-            }
-            staticLetters.forEach(obj => {
-                let obb = getOBB(obj, letterCollisionScale);
-                let helper = createOBBHelper(obb, 0x00ff00);
-                scene.add(helper);
-                boundingBoxHelpers.push(helper);
-            });
-            fallingLetters.forEach(obj => {
-                let obb = getOBB(obj, letterCollisionScale);
-                let helper = createOBBHelper(obb, 0x0000ff);
-                scene.add(helper);
-                boundingBoxHelpers.push(helper);
-            });
-        } else {
-            boundingBoxHelpers.forEach(helper => scene.remove(helper));
-            boundingBoxHelpers = [];
-        }
-        */
-
         update_spot_light();
 
-        renderer.draw_obb( lamp.transform, lamp.aabb, new Vector4( 1.0, 0.0, 0.0, 1.0 ) );
-        staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
-        fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
+        // -------- Bounding Box Visualization --------
+        // Draw the bounding boxes if the game is paused (via 'p') or if debug draw is enabled (toggled via 'b').
+        if ( debugDraw )
+        {
+          renderer.draw_obb( lamp.transform, lamp.aabb, new Vector4( 1.0, 0.0, 0.0, 1.0 ) );
+          staticLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 1.0, 0.0, 1.0 ) ));
+          fallingLetters.forEach( letter => renderer.draw_obb( letter.transform, letter.aabb, new Vector4( 0.0, 0.0, 1.0, 1.0 ) ));
 
-        lamp.mesh.skeleton.draw_debug( renderer, lamp.transform );
+          lamp.mesh.skeleton.draw_debug( renderer, lamp.transform );
+        }
 
         renderer.submit(scene);
     }
