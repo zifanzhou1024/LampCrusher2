@@ -1333,12 +1333,6 @@ export class Renderer
         );
 
         actor.mesh.draw( 'g_Model', actor.transform, 'g_PrevModel', actor.prev_transform );
-
-        const error = gl.getError();
-        if ( error !== gl.NO_ERROR )
-        {
-          console.error( "WebGL error: " + error );
-        }
       }
     );
   }
