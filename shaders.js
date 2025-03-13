@@ -447,21 +447,6 @@ export const kShaders = {
       return texel;
     }
 
-    float luma_rec709( vec3 color )
-    {
-      return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-    }
-
-    vec3 luma_weight_color_rec709( vec3 color )
-    {
-      return color / ( 1.0 + luma_rec709( color ) );
-    }
-
-    vec3 inverse_luma_weight_color_rec709( vec3 color )
-    {
-      return color / ( 1.0 - luma_rec709( color ) );
-    }
-
     void tap_curr_buffer(
       vec2 texel_offset,
       vec2 texel,
@@ -469,7 +454,7 @@ export const kShaders = {
       inout vec3 max_color
     ) {
       vec2 uv    = texel_to_uv( texel + texel_offset );
-      vec3 color = luma_weight_color_rec709( texture2D( g_PBRBuffer, uv ).rgb );
+      vec3 color = texture2D( g_PBRBuffer, uv ).rgb;
 
       min_color  = min( min_color, color );
       max_color  = max( max_color, color );
@@ -533,13 +518,13 @@ export const kShaders = {
       float acceleration          = length( prev_velocity - curr_velocity );
       float velocity_disocclusion = clamp( ( acceleration - 0.001 ) * 10.0, 0.0, 1.0 );
 
-      vec3 curr_color    = luma_weight_color_rec709( texture2D( g_PBRBuffer,     uv ).rgb );
-      vec3 prev_color    = luma_weight_color_rec709( texture2D( g_AccumulationBuffer, reproj_uv ).rgb );
+      vec3 curr_color    = texture2D( g_PBRBuffer,     uv ).rgb;
+      vec3 prev_color    = texture2D( g_AccumulationBuffer, reproj_uv ).rgb;
       prev_color         = clamp( prev_color, min_color, max_color );
       vec3 accumulation  = 0.9 * prev_color + 0.1 * curr_color;
         
       vec3 resolve       = mix( accumulation, curr_color, velocity_disocclusion );
-      gl_FragColor       = vec4( inverse_luma_weight_color_rec709( resolve ), 1.0 );
+      gl_FragColor       = vec4( resolve, 1.0 );
     }`,
 
   'PS_Tonemapping': `

@@ -14,10 +14,10 @@ export const RenderBuffers = Object.freeze({
   // kShadowMapLamp:          4,
   kShadowMapSun:           4,
   kPBRLighting:            5,
-  kAccumulation:           6,
-  kGBufferVelocityPrev:    7,
-  kTAA:                    8,
-  kPostProcessing:         9,
+  kPostProcessing:         6,
+  kAccumulation:           7,
+  kGBufferVelocityPrev:    8,
+  kTAA:                    9,
   kCount:                  10,
 });
 
@@ -1015,7 +1015,7 @@ export class Renderer
       new GpuVertexShader(kShaders.VS_FullscreenQuad),
       new GpuFragmentShader(kShaders.PS_TAA),
       { 
-        g_PBRBuffer:           this.render_buffers[ RenderBuffers.kPBRLighting         ],
+        g_PBRBuffer:           this.render_buffers[ RenderBuffers.kPostProcessing      ],
         g_AccumulationBuffer:  this.render_buffers[ RenderBuffers.kAccumulation        ],
         g_GBufferVelocity:     this.render_buffers[ RenderBuffers.kGBufferVelocity     ],
         g_GBufferVelocityPrev: this.render_buffers[ RenderBuffers.kGBufferVelocityPrev ],
@@ -1026,7 +1026,7 @@ export class Renderer
     this.post_processing = new GpuGraphicsPSO(
       new GpuVertexShader(kShaders.VS_FullscreenQuad),
       new GpuFragmentShader(kShaders.PS_Tonemapping),
-      { g_HDRBuffer: this.render_buffers[ RenderBuffers.kTAA ] }
+      { g_HDRBuffer: this.render_buffers[ RenderBuffers.kPBRLighting ] }
     );
 
     // ***** ADD SMOKE SHADER  *****
@@ -1054,7 +1054,7 @@ export class Renderer
       new GpuVertexShader(kShaders.VS_FullscreenQuad),
       new GpuFragmentShader(kShaders.PS_Blit),
     );
-    this.blit_buffer     = RenderBuffers.kPostProcessing;
+    this.blit_buffer     = RenderBuffers.kTAA;
     this.frame_id        = 0;
     this.enable_taa      = true;
     this.enable_pcf      = true;
@@ -1458,6 +1458,18 @@ export class Renderer
     this.quad.draw();
   }
 
+  render_handler_post_processing()
+  {
+    gl.bindFramebuffer( gl.FRAMEBUFFER, this.post_processing_buffer );
+    gl.viewport( 0, 0, gl.canvas.width, gl.canvas.height );
+    gl.clearColor( 0.0, 0.0, 0.0, 0.0 );
+    gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
+    gl.depthFunc( gl.ALWAYS );
+
+    this.post_processing.bind({});
+    this.quad.draw();
+  }
+
   render_handler_taa()
   {
     gl.bindFramebuffer( gl.FRAMEBUFFER, this.taa_buffer );
@@ -1473,21 +1485,9 @@ export class Renderer
     }
     else
     {
-      this.blit.bind( { g_Sampler: this.render_buffers[ RenderBuffers.kPBRLighting ] } );
+      this.blit.bind( { g_Sampler: this.render_buffers[ RenderBuffers.kPostProcessing ] } );
       this.quad.draw();
     }
-  }
-
-  render_handler_post_processing()
-  {
-    gl.bindFramebuffer( gl.FRAMEBUFFER, this.post_processing_buffer );
-    gl.viewport( 0, 0, gl.canvas.width, gl.canvas.height );
-    gl.clearColor( 0.0, 0.0, 0.0, 0.0 );
-    gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
-    gl.depthFunc( gl.ALWAYS );
-
-    this.post_processing.bind({});
-    this.quad.draw();
   }
 
   // ***** ADD SMOKE RENDER HANDLER *****
@@ -1692,9 +1692,10 @@ export class Renderer
     this.enable_pcf = this.enable_pcf;
 
     this.render_handler_lighting( scene );
+    this.render_handler_post_processing();
+
     this.render_handler_taa();
     this.render_handler_copy_temporal();
-    this.render_handler_post_processing();
     // ***** CONDICIONAL SMOKE EFFECT RENDERING *****
     // if (this.triggerSmoke) {
     //   this.render_handler_smoke();

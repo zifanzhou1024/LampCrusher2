@@ -16,6 +16,9 @@ class Letter extends Actor
     constructor(model, material)
     {
         super(model, material, 0.5);
+        this.spring_ks          = 1000;
+        this.spring_kd          = 20;
+
         this.squishing = false;
         this.squishElapsed = 0.0;
         this.squishDuration = 0.0;
@@ -737,10 +740,10 @@ async function main()
                 const letter = allLetters[i];
                 const letterOBB = getOBB(letter, letterCollisionScale);
 
-                if (obbIntersect(lampOBB, letterOBB)) {
+                if (0 && obbIntersect(lampOBB, letterOBB)) {
                     // Determine if both lamp and letter are on the ground.
                     const lampGrounded = lamp.is_grounded();
-                    const letterGrounded = Math.abs(letter.get_position().y) < 0.1; // assume letter rests at y ~ 0
+                    const letterGrounded = letter.is_grounded(); // assume letter rests at y ~ 0
 
                     if (lampGrounded && letterGrounded) {
                         // Both are on the ground. Compute the MTV on the XZ plane.
@@ -753,7 +756,7 @@ async function main()
                         // (Optionally, you can re-compute lampOBB here if needed.)
                     } else {
                         // If the lamp is airborne:
-                        if (lamp.get_position().y > letter.get_position().y + 0.5 && lamp.get_velocity().y < 0.0) {
+                        if (lamp.get_position().y > letter.get_position().y + letter.spring_length - 0.1 && lamp.get_velocity().y < 0.0) {
                             if (!letter.squishing) {
                                 letter.squishing = true;
                                 letter.squishElapsed = 0;
@@ -778,6 +781,7 @@ async function main()
         }
 
         // Process squishing animations for both static and falling letters.
+        /*
         const processSquish = (letterArray) => {
             for (let i = letterArray.length - 1; i >= 0; i--) {
                 const letter = letterArray[i];
@@ -797,6 +801,7 @@ async function main()
         };
         processSquish(staticLetters);
         processSquish(fallingLetters);
+        */
 
         // Update particle systems (fade out / remove)
         updateParticles();
