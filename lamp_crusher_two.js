@@ -61,6 +61,8 @@ async function main()
     let vKeyPressed = false;
     let pKeyPressed = false;
 
+    const kMaxLetters = 64;
+
     // Toggle for persistent bounding boxes (via 'b')
     let debugDraw = false;
 
@@ -189,8 +191,8 @@ async function main()
       scene.spot_light.direction = new Vector3(dir.x, dir.y, dir.z).normalize();
     }
 
-    const staticLetters = [];
-    const fallingLetters = [];
+    let staticLetters = [];
+    let fallingLetters = [];
 
     const spawnStaticLetters = () =>
     {
@@ -331,9 +333,9 @@ async function main()
         if (!gameStarted || gameOver) return;
         const letters = ['p', 'i', 'x', 'a', 'r'];
         const randomLetter = letters[Math.floor(Math.random() * letters.length)];
-        const posX = Math.random() * 30 - 15;
-        const posY = 30;
-        const posZ = Math.random() * 30 - 15;
+        const posX = Math.random() * 40 - 20;
+        const posY = 40;
+        const posZ = Math.random() * 40 - 20;
 
         const actor = new Letter(letterModels[randomLetter], letterMaterial);
         actor.set_position(new Vector3(posX, posY, posZ));
@@ -580,7 +582,7 @@ async function main()
 
             // Spawn letters at intervals
             letterSpawnTimer += dt;
-            if (letterSpawnTimer >= currentSpawnInterval) {
+            if (letterSpawnTimer >= currentSpawnInterval && fallingLetters.length < kMaxLetters) {
                 spawnFallingLetter();
                 letterSpawnTimer = 0;
                 // Speed up spawning as time progresses
@@ -736,83 +738,16 @@ async function main()
                 camera.transform.setPosition(lamp.get_position().add(offset));
                 camera.look_at(lamp.get_position());
             }
-
-            // ----- Lamp-Letter Collision Handling -----
-            const lampOBB = getOBB(lamp, lampCollisionScale);
-            const allLetters = staticLetters.concat(fallingLetters);
-
-            for (let i = allLetters.length - 1; i >= 0; i--) {
-                const letter = allLetters[i];
-                const letterOBB = getOBB(letter, letterCollisionScale);
-
-                if (0 && obbIntersect(lampOBB, letterOBB)) {
-                    // Determine if both lamp and letter are on the ground.
-                    const lampGrounded = lamp.is_grounded();
-                    const letterGrounded = letter.is_grounded(); // assume letter rests at y ~ 0
-
-                    if (lampGrounded && letterGrounded) {
-                        // Both are on the ground. Compute the MTV on the XZ plane.
-                        const correction = resolveCollisionMTV(lampOBB, letterOBB);
-                        // Update the lamp's position (create a new vector and call set_position).
-                        const newPos = lamp.get_position().clone().add(correction);
-                        lamp.set_position(newPos);
-
-                        // After correcting the position, update lampOBB for further checks.
-                        // (Optionally, you can re-compute lampOBB here if needed.)
-                    } else {
-                        // If the lamp is airborne:
-                        if (lamp.get_position().y > letter.get_position().y + letter.spring_length - 0.1 && lamp.get_velocity().y < 0.0) {
-                            if (!letter.squishing) {
-                                letter.squishing = true;
-                                letter.squishElapsed = 0;
-                                letter.squishDuration = squishDuration;
-                                letter.originalScale = letter.get_scale().clone();
-                                score += 10;
-                                scene.health = scene.health + 40;
-                            }
-                        } else {
-                            // Otherwise, if airborne but not far enough above, use MTV resolution as well.
-                            const correction = resolveCollisionMTV(lampOBB, letterOBB);
-                            const newPos = lamp.get_position().clone().add(correction);
-                            lamp.set_position(newPos);
-                        }
-                    }
-                    // (Optionally update lampOBB after position change.)
-                }
-            }
-
-
-
         }
-
-        // Process squishing animations for both static and falling letters.
-        /*
-        const processSquish = (letterArray) => {
-            for (let i = letterArray.length - 1; i >= 0; i--) {
-                const letter = letterArray[i];
-                if (letter.squishing) {
-                    letter.squishElapsed += dt;
-                    let progress = letter.squishElapsed / letter.squishDuration;
-                    if (progress > 1) progress = 1;
-                    const scale = letter.get_scale();
-                    scale.y = letter.originalScale.y * (1 - 0.9 * progress);
-                    letter.set_scale(scale);
-                    if (progress >= 1) {
-                        scene.remove(letter);
-                        letterArray.splice(i, 1);
-                    }
-                }
-            }
-        };
-        processSquish(staticLetters);
-        processSquish(fallingLetters);
-        */
 
         // Update particle systems (fade out / remove)
         updateParticles();
         physics.fixed_update( scene, time );
 
         update_spot_light();
+
+        staticLetters  = staticLetters.filter( letter => letter.id !== 0 );
+        fallingLetters = fallingLetters.filter( letter => letter.id !== 0 );
 
         // -------- Bounding Box Visualization --------
         // Draw the bounding boxes if the game is paused (via 'p') or if debug draw is enabled (toggled via 'b').

@@ -174,6 +174,7 @@ export class GpuGraphicsPSO
     else
     {
       location = gl.getUniformLocation(this.pso, name);
+      this.uniform_cache.set( name, location );
     }
 
     if (!location)
