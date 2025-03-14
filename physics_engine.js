@@ -1,3 +1,4 @@
+
 import { Vector2, Vector3, Vector4, Matrix4, Euler, Quaternion, Box3 } from 'three';
 
 const kGravity = 9.8;
@@ -212,7 +213,7 @@ export class PhysicsEngine
               const soft_body_aabb        = soft_body.aabb.clone().applyMatrix4( soft_body.transform );
               const soft_body_rest_height = soft_body.aabb.clone().getSize( new Vector3() ).y;
               const soft_body_height      = soft_body_aabb.getSize( new Vector3() ).y;
-
+/*
               if ( !obbIntersect( soft_body_obb, rigid_body_obb ) )
               {
                 if ( !soft_body.scale_velocity )
@@ -229,6 +230,53 @@ export class PhysicsEngine
 
                 return;
               }
+*/
+              if (!obbIntersect(soft_body_obb, rigid_body_obb)) {
+                // 如果之前没定义过 scale_velocity，就初始化一个
+                if (!soft_body.scale_velocity) {
+                    soft_body.scale_velocity = new Vector3();
+                }
+
+                // ──────────────────────────────────────────────────────────
+                // 1) 这里先计算“想要回弹的目标高度(targetHeight)”
+                //    如果 soft_body 是 Letter，则用它的 restHeight * currentRestFactor
+                //    否则用它本身 aabb 的原始高度（和以前一样）
+                // ──────────────────────────────────────────────────────────
+                let targetHeight;
+                if (soft_body.type === 'letter') {
+                    // Letter 用“原始高度 * currentRestFactor”
+                    targetHeight = soft_body.restHeight * soft_body.currentRestFactor;
+                } else {
+                    // 其它有弹簧属性的 Actor，仍然用自身 AABB 的高度
+                    const soft_body_rest_height = soft_body.aabb.clone().getSize(new Vector3()).y;
+                    targetHeight = soft_body_rest_height;
+                }
+
+                // 计算当前 soft_body 的实际世界高度
+                const soft_body_aabb = soft_body.aabb.clone().applyMatrix4(soft_body.transform);
+                const soft_body_height = soft_body_aabb.getSize(new Vector3()).y;
+
+                // ──────────────────────────────────────────────────────────
+                // 2) 用“(目标高度 - 当前高度) * kS - 阻尼项”算出弹簧力
+                //    不再用死值，而是基于 targetHeight
+                // ──────────────────────────────────────────────────────────
+                const spring_force = (targetHeight - soft_body_height) * soft_body.spring_ks
+                                  - soft_body.spring_kd * soft_body.scale_velocity.y;
+
+                // 将该力转换成对 scale_velocity 的变化
+                soft_body.scale_velocity.y += spring_force * kTimestep;
+
+                // 更新实际缩放：old_scale + scale_velocity * dt
+                const old_scale = soft_body.get_scale();
+                const new_scale = old_scale.clone().add(soft_body.scale_velocity.clone().multiplyScalar(kTimestep));
+
+                // 让 y 方向不要缩成负数，最少保持一些厚度
+                new_scale.y = Math.max(0.1, new_scale.y);
+                soft_body.set_scale(new_scale);
+
+                // 记得返回，因为这个分支下不走后面的碰撞分支
+                return;
+              }
 
               const vertical_penetration = soft_body.get_position().y + soft_body_height - rigid_body.get_position().y;
 
@@ -242,16 +290,33 @@ export class PhysicsEngine
               }
               else if ( vertical_penetration > 0.0 && rigid_body.get_velocity().y < 0.3 && soft_body.is_grounded() )
               {
+                if (soft_body.currentRestFactor <= 0.4) {
+                  scene.health += 30;
+                  scene.remove(soft_body);
+                  console.log("Letter removed! 20 Points");
+                  return;
+                }   
+                // 4. (Optional) Give the lamp a bit of upward force
+                const stompImpulse = 1200.0 * (1 + soft_body.currentRestFactor) / 2; // tune as desired
+                rigid_body.add_force(new Vector3(0, stompImpulse, 0));
+
+                soft_body.currentRestFactor -= 0.33;
+                scene.health += 15;
+   
+                console.log("Stomped letter! 10 Points; new restFactor =", soft_body.currentRestFactor);
+                /*
                 const new_soft_body_height = Math.max( soft_body_height - vertical_penetration, 0.1 );
-                const new_scale_y          = new_soft_body_height / soft_body_height;
+                const new_scale_y = new_soft_body_height / soft_body_rest_height;
                 const old_scale_y          = soft_body.get_scale().y;
 
                 const spring_force         = ( soft_body_rest_height - new_soft_body_height ) * soft_body.spring_ks - soft_body.spring_kd * soft_body.scale_velocity.y;
-                soft_body.scale_velocity   = new Vector3( 0.0, ( new_soft_body_height - soft_body_height ) / kTimestep, 0.0  )
-                soft_body.set_scale( new Vector3( 1.0, new_scale_y * old_scale_y, 1.0 ) );
+                console.log( `Spring force: ${spring_force}` );
+                soft_body.scale_velocity = new Vector3( 0.0, ( new_soft_body_height - soft_body_rest_height ) / kTimestep, 0.0  );
+                soft_body.set_scale( new Vector3( 1.0, new_scale_y, 1.0 ) );
                 rigid_body.add_force( new Vector3( 0.0, spring_force, 0.0 ) );
 
                 console.log( `Landed on letter! ${new_scale_y}` );
+                */
               }
             }
           )
@@ -290,4 +355,3 @@ export class PhysicsEngine
     }
   }
 }
-

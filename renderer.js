@@ -525,6 +525,7 @@ export class Scene
     this.directional_light = null;
     this.spot_light        = null;
     this.actor_id          = 0;
+    this.health           = 100;
   }
 
   add( actor )

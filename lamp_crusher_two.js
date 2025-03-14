@@ -16,8 +16,14 @@ class Letter extends Actor
     constructor(model, material)
     {
         super(model, material, 0.5);
-        this.spring_ks          = 1000;
+        this.spring_ks          = 3000;
         this.spring_kd          = 20;
+
+        //add
+        this.restHeight = this.aabb.clone().getSize(new Vector3()).y;
+        this.currentRestFactor = 1.0;
+        this.type = 'letter';
+        //add
 
         this.squishing = false;
         this.squishElapsed = 0.0;
@@ -42,7 +48,6 @@ async function main()
     // ---------- Game State Variables --------------
     let gameStarted = false;
     let gameOver = false;
-    let health = 100;
     let score = 0;
     let startTime = 0;
     let letterSpawnTimer = 0;
@@ -358,7 +363,7 @@ async function main()
         currentGameMode = mode;  // mode is either 'normal' or 'demo'
         gameStarted = true;
         gameOver = false;
-        health = mode === 'demo' ? 400 : 50;
+        scene.health = mode === 'demo' ? 400 : 50;
         score = 0;
         startTime = performance.now();
         letterSpawnTimer = 0;
@@ -378,14 +383,14 @@ async function main()
         currentGameMode = 'intro';
 
         // Reset health & stats for the "intro" state
-        health = 100;
+        scene.health = 100;
         score = 0;
         startTime = 0;
         letterSpawnTimer = 0;
         currentSpawnInterval = 2;
 
         // Immediately update UI so values reflect 100 health, 0 score/time
-        updateUI(health, score, 0);
+        updateUI(scene.health, score, 0);
 
         // Restore ambient light to original intensity for the intro
         scene.directional_light.luminance = 7;
@@ -562,16 +567,16 @@ async function main()
                 if (currentGameMode === 'demo') {
                     decreaseAmount *= 0.5;
                 }
-                health -= decreaseAmount;
+                scene.health -= decreaseAmount;
             }
-            if (health <= 0) {
-                health = 0;
+            if (scene.health <= 0) {
+                scene.health = 0;
                 displayGameOver();
             }
-            updateUI(health, score, elapsedTime);
+            updateUI(scene.health, score, elapsedTime);
 
             // Dim ambient light as health decreases
-            scene.directional_light.luminance = Math.min( ( health / 100 ) * 7, 7 );
+            scene.directional_light.luminance = Math.min( ( scene.health / 100 ) * 7, 7 );
 
             // Spawn letters at intervals
             letterSpawnTimer += dt;
@@ -763,7 +768,7 @@ async function main()
                                 letter.squishDuration = squishDuration;
                                 letter.originalScale = letter.get_scale().clone();
                                 score += 10;
-                                health = health + 40;
+                                scene.health = scene.health + 40;
                             }
                         } else {
                             // Otherwise, if airborne but not far enough above, use MTV resolution as well.
