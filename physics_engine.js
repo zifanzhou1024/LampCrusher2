@@ -293,6 +293,9 @@ export class PhysicsEngine
                 if (soft_body.currentRestFactor <= 0.4) {
                   scene.health += 30;
                   scene.remove(soft_body);
+                  if (window.spawnCrushParticles) {
+                    window.spawnCrushParticles(scene, soft_body.get_position());
+                  }
                   console.log("Letter removed! 20 Points");
                   return;
                 }   
