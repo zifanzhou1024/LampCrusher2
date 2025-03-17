@@ -6,7 +6,7 @@ import { PhysicsEngine } from "./physics_engine.js";
 
 import * as THREE from 'three';
 import { Vector2, Vector3, Vector4, Matrix4, Euler } from 'three';
-import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen } from './ui.js';
+import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen, spawnScorePopup, displayWinScreen } from './ui.js';
 
 const canvas = document.getElementById("gl_canvas");
 
@@ -107,7 +107,7 @@ async function main()
     // ---------- Game State Variables --------------
     let gameStarted = false;
     let gameOver = false;
-    let score = 0;
+    let gameWin = false;
     let startTime = 0;
     let letterSpawnTimer = 0;
     let currentSpawnInterval = 2;
@@ -147,6 +147,7 @@ async function main()
     const camera = new Camera( 75.0 * Math.PI / 180.0 );
     camera.transform.setPosition(0, 3, 5);
     scene.camera = camera;
+    scene.score = 0;
 
     // ---------- Event Listeners --------------
     window.addEventListener('keydown', (event) => {
@@ -365,14 +366,29 @@ async function main()
 
         displayGameOverScreen(resetGame);
     }
+    // New: Winning state function using gameWin.
+    function displayWin() {
+        gameWin = true;
+        document.exitPointerLock();
+        displayWinScreen(resetGame);
+    }
+
 
     function startGame(mode = 'normal') {
-        // When starting the game, switch from the intro state into either normal or demo mode.
-        currentGameMode = mode;  // mode is either 'normal' or 'demo'
+        currentGameMode = mode;  // mode is 'easy', 'normal', 'hard', or 'demo'
         gameStarted = true;
         gameOver = false;
-        scene.health = mode === 'demo' ? 400 : 50;
-        score = 0;
+
+        // Set starting health: 100 for easy; 50 for normal/hard; demo mode stays 400.
+        if (mode === 'easy') {
+            scene.health = 100;
+        } else if (mode === 'demo') {
+            scene.health = 400;
+        } else {
+            scene.health = 50;
+        }
+
+        scene.score = 0;
         startTime = performance.now();
         letterSpawnTimer = 0;
         currentSpawnInterval = 2;
@@ -392,13 +408,13 @@ async function main()
 
         // Reset health & stats for the "intro" state
         scene.health = 100;
-        score = 0;
+        scene.score = 0;
         startTime = 0;
         letterSpawnTimer = 0;
         currentSpawnInterval = 2;
 
         // Immediately update UI so values reflect 100 health, 0 score/time
-        updateUI(scene.health, score, 0);
+        updateUI(scene.health, scene.score, 0);
 
         // Restore ambient light to original intensity for the intro
         scene.directional_light.luminance = 7;
@@ -565,13 +581,17 @@ async function main()
         const dt = clock.getDelta();
 
         // In non-intro modes, update game logic.
-        if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
+        if (currentGameMode !== 'intro' && gameStarted && !gameOver && !gameWin) {
             let elapsedTime = (performance.now() - startTime) / 1000;
             let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
             if (!healthDecreasePaused) {
                 let decreaseAmount = 10 * healthDecreaseRate * dt;
-                if (currentGameMode === 'demo') {
-                    decreaseAmount *= 0.5;
+                if (currentGameMode === 'easy') {
+                    decreaseAmount *= 0.5;  // Health decreases half as fast in easy mode
+                } else if (currentGameMode === 'hard') {
+                    decreaseAmount *= 2.0;  // Health decreases twice as fast in hard mode
+                } else if (currentGameMode === 'demo') {
+                    decreaseAmount *= 0.5;  // Demo mode as before
                 }
                 scene.health -= decreaseAmount;
             }
@@ -579,7 +599,24 @@ async function main()
                 scene.health = 0;
                 displayGameOver();
             }
-            updateUI(scene.health, score, elapsedTime);
+            updateUI(scene.health, scene.score, elapsedTime);
+
+            // --- NEW: Check for win condition.
+            let winThreshold;
+            if (currentGameMode === 'easy') {
+                winThreshold = 200;
+            } else if (currentGameMode === 'normal') {
+                winThreshold = 300;
+            } else if (currentGameMode === 'hard') {
+                winThreshold = 400;
+            } else if (currentGameMode === 'demo') {
+                winThreshold = 300;  // demo mode remains unchanged, or you can adjust as desired
+            }
+            if (scene.score >= winThreshold) {
+                // Clamp score to the threshold and trigger win state.
+                scene.score = winThreshold;
+                displayWin();
+            }
 
             // Dim ambient light as health decreases
             scene.directional_light.luminance = Math.min( ( scene.health / 100 ) * 7, 7 );
@@ -591,13 +628,16 @@ async function main()
                 letterSpawnTimer = 0;
                 // Speed up spawning as time progresses
                 currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
+                if (currentGameMode === 'hard' || currentGameMode === 'easy') {
+                    currentSpawnInterval /= 1.5;
+                }
             }
         }
 
         const clamp = ( x, min, max ) => Math.min( Math.max( x, min ), max );
 
         // ----- Lamp Movement, Jumping, and Rotation -----
-        if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
+        if (currentGameMode !== 'intro' && gameStarted && !gameOver && !gameWin) {
             const speed = 0.15;
             // Get forward/right vectors from camera (flattened on Y).
             const forward = camera.get_forward();
