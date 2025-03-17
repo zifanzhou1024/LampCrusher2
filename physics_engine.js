@@ -1,5 +1,6 @@
 
 import { Vector2, Vector3, Vector4, Matrix4, Euler, Quaternion, Box3 } from 'three';
+import {updateUI, spawnScorePopup}  from "./ui";
 
 const kGravity = 9.8;
 
@@ -292,11 +293,15 @@ export class PhysicsEngine
               {
                 if (soft_body.currentRestFactor <= 0.4) {
                   scene.health += 30;
+
                   scene.remove(soft_body);
                   if (window.spawnCrushParticles) {
                     window.spawnCrushParticles(scene, soft_body.get_position());
                   }
                   console.log("Letter removed! 20 Points");
+                   spawnScorePopup(20);
+                   scene.score += 20;
+                   // updateUI(scene.health, scene.score, scene.time);
                   return;
                 }   
                 // 4. (Optional) Give the lamp a bit of upward force
@@ -305,6 +310,9 @@ export class PhysicsEngine
 
                 soft_body.currentRestFactor -= 0.33;
                 scene.health += 15;
+                spawnScorePopup(10);
+                scene.score += 15;
+                // updateUI(scene.health, scene.score, scene.time);
    
                 console.log("Stomped letter! 10 Points; new restFactor =", soft_body.currentRestFactor);
                 /*

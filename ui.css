@@ -1,0 +1,29 @@
+/* Style for the animated score popup */
+.score-popup {
+    display: inline-block;
+    font-size: 1.5em;
+    color: white; /* Ensure white text */
+    animation: popupFade 1s ease-out forwards;
+    margin-left: 10px; /* adjust spacing as needed */
+    position: relative;
+    top: 5px; /* lowers the popup by 5px */
+}
+
+#scorePopupContainer .score-popup {
+    color: white;
+}
+
+@keyframes popupFade {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: translateY(-20px) scale(1.5);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-40px) scale(1);
+    }
+}

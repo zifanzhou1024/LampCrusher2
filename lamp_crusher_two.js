@@ -6,7 +6,7 @@ import { PhysicsEngine } from "./physics_engine.js";
 
 import * as THREE from 'three';
 import { Vector2, Vector3, Vector4, Matrix4, Euler } from 'three';
-import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen } from './ui.js';
+import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen, spawnScorePopup } from './ui.js';
 
 const canvas = document.getElementById("gl_canvas");
 
@@ -107,7 +107,6 @@ async function main()
     // ---------- Game State Variables --------------
     let gameStarted = false;
     let gameOver = false;
-    let score = 0;
     let startTime = 0;
     let letterSpawnTimer = 0;
     let currentSpawnInterval = 2;
@@ -147,6 +146,7 @@ async function main()
     const camera = new Camera( 75.0 * Math.PI / 180.0 );
     camera.transform.setPosition(0, 3, 5);
     scene.camera = camera;
+    scene.score = 0;
 
     // ---------- Event Listeners --------------
     window.addEventListener('keydown', (event) => {
@@ -372,7 +372,7 @@ async function main()
         gameStarted = true;
         gameOver = false;
         scene.health = mode === 'demo' ? 400 : 50;
-        score = 0;
+        scene.score = 0;
         startTime = performance.now();
         letterSpawnTimer = 0;
         currentSpawnInterval = 2;
@@ -392,13 +392,13 @@ async function main()
 
         // Reset health & stats for the "intro" state
         scene.health = 100;
-        score = 0;
+        scene.score = 0;
         startTime = 0;
         letterSpawnTimer = 0;
         currentSpawnInterval = 2;
 
         // Immediately update UI so values reflect 100 health, 0 score/time
-        updateUI(scene.health, score, 0);
+        updateUI(scene.health, scene.score, 0);
 
         // Restore ambient light to original intensity for the intro
         scene.directional_light.luminance = 7;
@@ -579,7 +579,7 @@ async function main()
                 scene.health = 0;
                 displayGameOver();
             }
-            updateUI(scene.health, score, elapsedTime);
+            updateUI(scene.health, scene.score, elapsedTime);
 
             // Dim ambient light as health decreases
             scene.directional_light.luminance = Math.min( ( scene.health / 100 ) * 7, 7 );
