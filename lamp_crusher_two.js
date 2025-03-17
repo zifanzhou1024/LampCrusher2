@@ -330,60 +330,6 @@ async function main()
         return { center, axes, halfSizes };
     }
 
-
-    function halfProjection(obb, axis) {
-        return obb.halfSizes.x * Math.abs(axis.dot(obb.axes[0])) +
-            obb.halfSizes.y * Math.abs(axis.dot(obb.axes[1])) +
-            obb.halfSizes.z * Math.abs(axis.dot(obb.axes[2]));
-    }
-
-    function obbIntersect(obb1, obb2) {
-        let axes = [];
-        axes.push(
-            obb1.axes[0], obb1.axes[1], obb1.axes[2],
-            obb2.axes[0], obb2.axes[1], obb2.axes[2]
-        );
-        for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
-                let axis = new THREE.Vector3().crossVectors(obb1.axes[i], obb2.axes[j]);
-                if (axis.lengthSq() > 1e-6) {
-                    axis.normalize();
-                    axes.push(axis);
-                }
-            }
-        }
-        let tVec = new THREE.Vector3().subVectors(obb2.center, obb1.center);
-        for (let i = 0; i < axes.length; i++) {
-            let axis = axes[i];
-            let r1 = halfProjection(obb1, axis);
-            let r2 = halfProjection(obb2, axis);
-            let t = Math.abs(tVec.dot(axis));
-            if (t > r1 + r2) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // ----- OBB Helper Functions -----
-    // Compute the eight corners of an oriented bounding box.
-    function computeOBBCorners(obb) {
-        const { center, axes, halfSizes } = obb;
-        const corners = [];
-        for (let dx of [-1, 1]) {
-            for (let dy of [-1, 1]) {
-                for (let dz of [-1, 1]) {
-                    let corner = new THREE.Vector3().copy(center);
-                    corner.add(new THREE.Vector3().copy(axes[0]).multiplyScalar(dx * halfSizes.x));
-                    corner.add(new THREE.Vector3().copy(axes[1]).multiplyScalar(dy * halfSizes.y));
-                    corner.add(new THREE.Vector3().copy(axes[2]).multiplyScalar(dz * halfSizes.z));
-                    corners.push(corner);
-                }
-            }
-        }
-        return corners;
-    }
-
     // Initial load of static letters
     spawnStaticLetters();
 
@@ -796,7 +742,9 @@ async function main()
                 cameraDistance * Math.sin(cameraRotationX) + 3,
                 cameraDistance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
             );
-            camera.transform.setPosition(lamp.get_position().add(offset));
+            const camera_pos = lamp.get_position().add(offset);
+            camera_pos.y = Math.max(camera_pos.y, 0.1);
+            camera.transform.setPosition(camera_pos);
             camera.look_at(lamp.get_position());
         }
 
