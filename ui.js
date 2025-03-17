@@ -4,8 +4,9 @@ export function initializeUI() {
     // Create the initial Start Menu with only "Play Now" and "Demo Mode".
     const startMenu = document.createElement('div');
     startMenu.id = 'startMenu';
+    // Position the menu at 75% of the screen height.
     startMenu.style.position = 'absolute';
-    startMenu.style.top = '70%';
+    startMenu.style.top = '65%';
     startMenu.style.left = '50%';
     startMenu.style.transform = 'translate(-50%, -50%)';
     startMenu.style.textAlign = 'center';
@@ -19,7 +20,7 @@ export function initializeUI() {
     titleElement.style.color = 'white';
     titleElement.style.marginBottom = '20px';
 
-    // "Play Now" button to open mode selection.
+    // "Play Now" button opens the mode selection menu.
     const playNowButton = document.createElement('button');
     playNowButton.textContent = 'Play Now';
     playNowButton.style.padding = '10px 20px';
@@ -30,13 +31,12 @@ export function initializeUI() {
     playNowButton.style.borderRadius = '5px';
     playNowButton.style.cursor = 'pointer';
     playNowButton.addEventListener('click', () => {
-        // Remove initial menu.
+        // Remove the initial menu; leave infoBox until a mode is selected.
         startMenu.remove();
-        // Show mode selection menu.
         createModeSelectionMenu();
     });
 
-    // "Demo Mode" button remains on the initial menu.
+    // "Demo Mode" button starts the game in demo mode immediately.
     const demoButton = document.createElement('button');
     demoButton.textContent = 'Demo Mode';
     demoButton.style.padding = '10px 20px';
@@ -51,13 +51,44 @@ export function initializeUI() {
         if (window.startGame) {
             window.startGame('demo');
         }
+        // Remove the info box and start menu after game starts.
+        const infoBox = document.getElementById('infoBox');
+        if(infoBox) infoBox.remove();
+        const menu = document.getElementById('startMenu');
+        if(menu) menu.remove();
     });
 
-    // Append title and both buttons to the start menu.
+    // Append title and buttons to the start menu.
     startMenu.appendChild(titleElement);
     startMenu.appendChild(playNowButton);
     startMenu.appendChild(demoButton);
     document.body.appendChild(startMenu);
+
+    // Create an information box at the bottom of the page.
+    const infoBox = document.createElement('div');
+    infoBox.id = 'infoBox';
+    infoBox.style.position = 'absolute';
+    infoBox.style.bottom = '20px';
+    infoBox.style.left = '50%';
+    infoBox.style.transform = 'translateX(-50%)';
+    infoBox.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    infoBox.style.color = 'white';
+    infoBox.style.padding = '10px';
+    infoBox.style.borderRadius = '5px';
+    infoBox.style.fontSize = '16px';
+    infoBox.style.width = '80%';
+    infoBox.style.textAlign = 'center';
+    // Insert line breaks for a neat layout.
+    infoBox.innerHTML =
+        'Lamp Crusher 2 is a fast-paced game where you control a lamp to crush falling letters.<br>' +
+        'Use WASD to move, Space to jump, and your mouse to look around.<br>' +
+        'Your objective is to stomp on letters to score points while managing your health, which decreases over time.<br>' +
+        'Win by reaching the required points:<br>' +
+        '- Easy Mode: 200 points<br>' +
+        '- Normal Mode: 300 points<br>' +
+        '- Hard Mode: 400 points<br>' +
+        'Avoid running out of health to win the game!';
+    document.body.appendChild(infoBox);
 
     // Create the Health/Score overlay.
     const healthAndScoreElement = document.createElement('div');
@@ -73,7 +104,7 @@ export function initializeUI() {
     healthAndScoreElement.textContent = 'Health: 100 | Score: 0 | Time: 0 s';
     document.body.appendChild(healthAndScoreElement);
 
-    // Create a dedicated container for score popups.
+    // Create a container for score popups.
     const scorePopupContainer = document.createElement('div');
     scorePopupContainer.id = 'scorePopupContainer';
     scorePopupContainer.style.position = 'absolute';
@@ -88,7 +119,7 @@ export function initializeUI() {
 }
 
 function createModeSelectionMenu() {
-    // Create the mode selection menu.
+    // Create a new menu for selecting the game mode.
     const modeMenu = document.createElement('div');
     modeMenu.id = 'modeMenu';
     modeMenu.style.position = 'absolute';
@@ -122,6 +153,8 @@ function createModeSelectionMenu() {
             window.startGame('easy');
         }
         modeMenu.remove();  // Remove the mode menu after clicking.
+        const infoBox = document.getElementById('infoBox');
+        if(infoBox) infoBox.remove();
     });
 
     // Normal Mode button.
@@ -140,6 +173,8 @@ function createModeSelectionMenu() {
             window.startGame('normal');
         }
         modeMenu.remove();  // Remove the mode menu after clicking.
+        const infoBox = document.getElementById('infoBox');
+        if(infoBox) infoBox.remove();
     });
 
     // Hard Mode button.
@@ -158,15 +193,16 @@ function createModeSelectionMenu() {
             window.startGame('hard');
         }
         modeMenu.remove();  // Remove the mode menu after clicking.
+        const infoBox = document.getElementById('infoBox');
+        if(infoBox) infoBox.remove();
     });
 
-    // Append the buttons to the mode menu.
+    // Append mode buttons to the mode menu.
     modeMenu.appendChild(easyButton);
     modeMenu.appendChild(normalButton);
     modeMenu.appendChild(hardButton);
     document.body.appendChild(modeMenu);
 }
-
 
 
 
