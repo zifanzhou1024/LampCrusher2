@@ -6,7 +6,7 @@ import { PhysicsEngine } from "./physics_engine.js";
 
 import * as THREE from 'three';
 import { Vector2, Vector3, Vector4, Matrix4, Euler } from 'three';
-import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen, spawnScorePopup } from './ui.js';
+import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen, spawnScorePopup, displayWinScreen } from './ui.js';
 
 const canvas = document.getElementById("gl_canvas");
 
@@ -107,6 +107,7 @@ async function main()
     // ---------- Game State Variables --------------
     let gameStarted = false;
     let gameOver = false;
+    let gameWin = false;
     let startTime = 0;
     let letterSpawnTimer = 0;
     let currentSpawnInterval = 2;
@@ -365,6 +366,13 @@ async function main()
 
         displayGameOverScreen(resetGame);
     }
+    // New: Winning state function using gameWin.
+    function displayWin() {
+        gameWin = true;
+        document.exitPointerLock();
+        displayWinScreen(resetGame);
+    }
+
 
     function startGame(mode = 'normal') {
         // When starting the game, switch from the intro state into either normal or demo mode.
@@ -565,7 +573,7 @@ async function main()
         const dt = clock.getDelta();
 
         // In non-intro modes, update game logic.
-        if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
+        if (currentGameMode !== 'intro' && gameStarted && !gameOver && !gameWin) {
             let elapsedTime = (performance.now() - startTime) / 1000;
             let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
             if (!healthDecreasePaused) {
@@ -580,6 +588,14 @@ async function main()
                 displayGameOver();
             }
             updateUI(scene.health, scene.score, elapsedTime);
+
+            // --- NEW: Check for win condition.
+            const winThreshold = currentGameMode === 'normal' ? 400 : (currentGameMode === 'demo' ? 300 : Infinity);
+            if (scene.score >= winThreshold) {
+                // Clamp score to the threshold and trigger win state.
+                scene.score = winThreshold;
+                displayWin();
+            }
 
             // Dim ambient light as health decreases
             scene.directional_light.luminance = Math.min( ( scene.health / 100 ) * 7, 7 );
@@ -597,7 +613,7 @@ async function main()
         const clamp = ( x, min, max ) => Math.min( Math.max( x, min ), max );
 
         // ----- Lamp Movement, Jumping, and Rotation -----
-        if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
+        if (currentGameMode !== 'intro' && gameStarted && !gameOver && !gameWin) {
             const speed = 0.15;
             // Get forward/right vectors from camera (flattened on Y).
             const forward = camera.get_forward();

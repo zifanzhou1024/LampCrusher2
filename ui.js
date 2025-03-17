@@ -152,3 +152,40 @@ export function removeGameOverScreen() {
         gameOverDiv.remove();
     }
 }
+
+export function displayWinScreen(playAgainCallback) {
+    const winDiv = document.createElement('div');
+    winDiv.id = 'winScreen';
+    winDiv.style.position = 'absolute';
+    winDiv.style.top = '60%';
+    winDiv.style.left = '50%';
+    winDiv.style.transform = 'translate(-50%, -50%)';
+    winDiv.style.textAlign = 'center';
+    winDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    winDiv.style.padding = '20px';
+    winDiv.style.borderRadius = '10px';
+    winDiv.style.zIndex = '9999';
+
+    const winText = document.createElement('h1');
+    winText.textContent = 'You Won!';
+    winText.style.color = 'white';
+    winText.style.marginBottom = '20px';
+
+    const playAgainButton = document.createElement('button');
+    playAgainButton.textContent = 'Play Again';
+    playAgainButton.style.padding = '10px 20px';
+    playAgainButton.style.fontSize = '18px';
+    playAgainButton.style.backgroundColor = '#4CAF50';
+    playAgainButton.style.color = 'white';
+    playAgainButton.style.border = 'none';
+    playAgainButton.style.borderRadius = '5px';
+    playAgainButton.style.cursor = 'pointer';
+    playAgainButton.addEventListener('click', () => {
+        playAgainCallback();
+        winDiv.remove();
+    });
+
+    winDiv.appendChild(winText);
+    winDiv.appendChild(playAgainButton);
+    document.body.appendChild(winDiv);
+}
