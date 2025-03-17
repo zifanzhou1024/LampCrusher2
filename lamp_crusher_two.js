@@ -473,11 +473,9 @@ async function main()
         activeParticles.length = 0;
 
         // Reset lamp to its original position/rotation
-        if (lamp) {
-            lamp.set_position(new Vector3(-3, 0, 5));
-            lamp.set_euler(new Euler(0, -Math.PI / 2, 0, 'ZXY'));
-            lampIsJumping = false;
-        }
+        lamp.set_position(new Vector3(-3, 0, 5));
+        lamp.set_euler(new Euler(0, -Math.PI / 2, 0, 'ZXY'));
+        lampIsJumping = false;
 
         // Show start menu again
         if (startMenu) {
@@ -653,156 +651,154 @@ async function main()
         const clamp = ( x, min, max ) => Math.min( Math.max( x, min ), max );
 
         // ----- Lamp Movement, Jumping, and Rotation -----
-        if (lamp) {
-            if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
-                const speed = 0.15;
-                // Get forward/right vectors from camera (flattened on Y).
-                const forward = camera.get_forward();
-                forward.y = 0;
-                forward.normalize();
+        if (currentGameMode !== 'intro' && gameStarted && !gameOver) {
+            const speed = 0.15;
+            // Get forward/right vectors from camera (flattened on Y).
+            const forward = camera.get_forward();
+            forward.y = 0;
+            forward.normalize();
 
-                const right = new THREE.Vector3();
-                right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+            const right = new THREE.Vector3();
+            right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
-                let move = new THREE.Vector3();
-                if (keyStates['w']) move.add(forward);
-                if (keyStates['s']) move.sub(forward);
-                if (keyStates['a']) move.sub(right);
-                if (keyStates['d']) move.add(right);
+            let move = new THREE.Vector3();
+            if (keyStates['w']) move.add(forward);
+            if (keyStates['s']) move.sub(forward);
+            if (keyStates['a']) move.sub(right);
+            if (keyStates['d']) move.add(right);
 
-                const kWalkAnimSpeed = 1.5;
-                if (move.lengthSq() > 0) {
-                    lamp.walk_t = ( lamp.walk_t + kWalkAnimSpeed * dt ) % 1;
-                    move.normalize();
-                    let prevLampPos = lamp.get_position().clone();
-                    const pos = lamp.get_position().addScaledVector(move, speed);
-                    lamp.set_position(pos);
+            const kWalkAnimSpeed = 1.5;
+            if (move.lengthSq() > 0) {
+                lamp.walk_t = ( lamp.walk_t + kWalkAnimSpeed * dt ) % 1;
+                move.normalize();
+                let prevLampPos = lamp.get_position().clone();
+                const pos = lamp.get_position().addScaledVector(move, speed);
+                lamp.set_position(pos);
 
-                    // --- Smooth Turning Implementation ---
-                    // Calculate the target angle from the movement vector.
-                    const targetAngle = Math.atan2(move.x, move.z);
-                    const rotationSpeed = 0.6; // Adjust for smoother turning.
-                    let angleDiff = targetAngle - lamp.get_euler().y;
-                    // Normalize angleDiff to [-π, π]
-                    angleDiff = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
-                    const rotation = lamp.get_euler();
-                    rotation.y += angleDiff * rotationSpeed;
-                    lamp.set_euler(rotation);
-                } else if (lamp.walk_t > 0.0 && lamp.walk_t < 1.0) {
-                    let walk_dt = kWalkAnimSpeed * dt;
-                    // Prevent unnecessary step when obviously not started.
-                    if (lamp.walk_t < 0.4)
-                    {
-                      walk_dt *= -1.0;
-                    }
-                    lamp.walk_t   = clamp( lamp.walk_t + walk_dt, 0.0, 1.0 );
+                // --- Smooth Turning Implementation ---
+                // Calculate the target angle from the movement vector.
+                const targetAngle = Math.atan2(move.x, move.z);
+                const rotationSpeed = 0.6; // Adjust for smoother turning.
+                let angleDiff = targetAngle - lamp.get_euler().y;
+                // Normalize angleDiff to [-π, π]
+                angleDiff = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                const rotation = lamp.get_euler();
+                rotation.y += angleDiff * rotationSpeed;
+                lamp.set_euler(rotation);
+            } else if (lamp.walk_t > 0.0 && lamp.walk_t < 1.0) {
+                let walk_dt = kWalkAnimSpeed * dt;
+                // Prevent unnecessary step when obviously not started.
+                if (lamp.walk_t < 0.4)
+                {
+                  walk_dt *= -1.0;
                 }
-
-                // Jump when space is pressed.
-                if (keyStates[' '] && !lampIsJumping) {
-                    lampIsJumping = true;
-                    lamp.jump_t   = 0.0;
-                    lamp.add_force(new Vector3(0.0, jumpStrength, 0.0));
-                }
+                lamp.walk_t   = clamp( lamp.walk_t + walk_dt, 0.0, 1.0 );
             }
-            // In the intro state, auto-jump for idle animation.
-            if (currentGameMode === 'intro' && !lampIsJumping && (lamp.jump_t >= 1.0 || lamp.jump_t <= 0.0)) {
+
+            // Jump when space is pressed.
+            if (keyStates[' '] && !lampIsJumping) {
                 lampIsJumping = true;
                 lamp.jump_t   = 0.0;
-                lamp.add_force(new Vector3(0.0, jumpStrength * 2, 0.0));
+                lamp.add_force(new Vector3(0.0, jumpStrength, 0.0));
             }
-            // Process jumping
-            if (lampIsJumping) {
-                if ( lamp.get_velocity().y > 0.01 )
-                {
-                  const kJumpAnimSpeed = 1.5;
-                  const jump_dt        = dt * kJumpAnimSpeed;
-                  lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 0.5 );
-                }
-                else
-                {
-                  const kJumpAnimSpeed = 0.2;
-                  const jump_dt        = dt * kJumpAnimSpeed;
-                  lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 0.63 );
-                }
-                if (lamp.is_grounded()) {
-                    lampIsJumping = false;
-                    console.log("Lamp landed!"); // Debug message
-                    // scene.add(points);
-                    // spawnParticlesAt(lamp.get_position());
-                    // renderer.triggerSmoke = true;
-
-                    // Create a transformation matrix to position the smoke where the lamp landed.
-                    const pos = lamp.get_position();
-                    //console.log("Lamp position:", pos); // ADD THIS
-
-                    // Start with a translation to the lamp's position.
-                    let transform = new Matrix4().makeTranslation(pos.x, pos.y, pos.z);
-                    //console.log("Translation matrix:", transform.elements); // ADD THIS
-
-                    // Rotate the quad so that it lies flat on the ground (adjust rotation as needed).
-                    const rot = new Euler(-Math.PI / 2, 0, 0, 'XYZ');
-                    const rotationMat = new Matrix4().makeRotationFromEuler(rot);
-                    transform.multiply(rotationMat);
-                    //console.log("After rotation:", transform.elements); // ADD THIS
-
-                    // Scale the quad to an appropriate size (adjust scale factors as desired).
-                    const scaleMat = new Matrix4().makeScale(4, 4, 4);
-                    transform.multiply(scaleMat);
-                    //console.log("After scaling:", transform.elements); // ADD THIS
-
-                    // Call the new smoke render method with the computed transform.
-                    // renderer.render_handler_smoke_at(transform);
-                    // Instead of rendering smoke immediately, store the transform and flag it:
-                    renderer.smokeTransform = transform;
-                    renderer.triggerSmoke = true;
-                }
-            } else {
-              const kJumpAnimSpeed = 1.0;
-              const jump_dt        = dt * kJumpAnimSpeed;
-              lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 1.0 );
-            }
-
-            if ( !lamp.is_grounded() || lamp.walk_t <= 0.0 || lamp.walk_t >= 1.0 )
+        }
+        // In the intro state, auto-jump for idle animation.
+        if (currentGameMode === 'intro' && !lampIsJumping && (lamp.jump_t >= 1.0 || lamp.jump_t <= 0.0)) {
+            lampIsJumping = true;
+            lamp.jump_t   = 0.0;
+            lamp.add_force(new Vector3(0.0, jumpStrength * 2, 0.0));
+        }
+        // Process jumping
+        if (lampIsJumping) {
+            if ( lamp.get_velocity().y > 0.01 )
             {
-              lamp.walk_t = 0.0;
-              lamp.update_anim( "Jump", lamp.jump_t );
+              const kJumpAnimSpeed = 1.5;
+              const jump_dt        = dt * kJumpAnimSpeed;
+              lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 0.5 );
             }
             else
             {
-              lamp.update_anim( "Walk", lamp.walk_t );
+              const kJumpAnimSpeed = 0.2;
+              const jump_dt        = dt * kJumpAnimSpeed;
+              lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 0.63 );
             }
+            if (lamp.is_grounded()) {
+                lampIsJumping = false;
+                console.log("Lamp landed!"); // Debug message
+                // scene.add(points);
+                // spawnParticlesAt(lamp.get_position());
+                // renderer.triggerSmoke = true;
 
-            // ----- Camera Setup -----
-            if (currentGameMode === 'intro') {
-                // Intro state: fixed camera position
-                camera.transform.setPosition(0, 2, 18);
-                camera.look_at(new Vector3(0, 0, 0));
-            } else if (firstPersonView) {
-                // First-person view: attach camera to lamp’s head.
-                const eyeOffset = new THREE.Vector3(0, 1, 0);
-                camera.transform.setPosition(lamp.get_position().add(eyeOffset));
-                const lookDirection = new THREE.Vector3(
-                    Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
-                    Math.sin(cameraRotationX),
-                    Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
-                );
-                camera.look_at(lamp.get_position().add(lookDirection));
-            } else {
-                // Third-person view: orbit camera around the lamp.
-                const offset = new THREE.Vector3(
-                    cameraDistance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
-                    cameraDistance * Math.sin(cameraRotationX) + 3,
-                    cameraDistance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
-                );
-                camera.transform.setPosition(lamp.get_position().add(offset));
-                camera.look_at(lamp.get_position());
+                // Create a transformation matrix to position the smoke where the lamp landed.
+                const pos = lamp.get_position();
+                //console.log("Lamp position:", pos); // ADD THIS
+
+                // Start with a translation to the lamp's position.
+                let transform = new Matrix4().makeTranslation(pos.x, pos.y, pos.z);
+                //console.log("Translation matrix:", transform.elements); // ADD THIS
+
+                // Rotate the quad so that it lies flat on the ground (adjust rotation as needed).
+                const rot = new Euler(-Math.PI / 2, 0, 0, 'XYZ');
+                const rotationMat = new Matrix4().makeRotationFromEuler(rot);
+                transform.multiply(rotationMat);
+                //console.log("After rotation:", transform.elements); // ADD THIS
+
+                // Scale the quad to an appropriate size (adjust scale factors as desired).
+                const scaleMat = new Matrix4().makeScale(4, 4, 4);
+                transform.multiply(scaleMat);
+                //console.log("After scaling:", transform.elements); // ADD THIS
+
+                // Call the new smoke render method with the computed transform.
+                // renderer.render_handler_smoke_at(transform);
+                // Instead of rendering smoke immediately, store the transform and flag it:
+                renderer.smokeTransform = transform;
+                renderer.triggerSmoke = true;
             }
+        } else {
+          const kJumpAnimSpeed = 1.0;
+          const jump_dt        = dt * kJumpAnimSpeed;
+          lamp.jump_t          = clamp( lamp.jump_t + jump_dt, 0.0, 1.0 );
+        }
+
+        if ( !lamp.is_grounded() || lamp.walk_t <= 0.0 || lamp.walk_t >= 1.0 )
+        {
+          lamp.walk_t = 0.0;
+          lamp.update_anim( "Jump", lamp.jump_t );
+        }
+        else
+        {
+          lamp.update_anim( "Walk", lamp.walk_t );
         }
 
         // Update particle systems (fade out / remove)
         updateParticles();
         physics.fixed_update( scene, time );
+
+        // ----- Camera Setup -----
+        if (currentGameMode === 'intro') {
+            // Intro state: fixed camera position
+            camera.transform.setPosition(0, 2, 18);
+            camera.look_at(new Vector3(0, 0, 0));
+        } else if (firstPersonView) {
+            // First-person view: attach camera to lamp’s head.
+            const eyeOffset = new THREE.Vector3(0, 1, 0);
+            camera.transform.setPosition(lamp.get_position().add(eyeOffset));
+            const lookDirection = new THREE.Vector3(
+                Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
+                Math.sin(cameraRotationX),
+                Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
+            );
+            camera.look_at(lamp.get_position().add(lookDirection));
+        } else {
+            // Third-person view: orbit camera around the lamp.
+            const offset = new THREE.Vector3(
+                cameraDistance * Math.sin(cameraRotationY) * Math.cos(cameraRotationX),
+                cameraDistance * Math.sin(cameraRotationX) + 3,
+                cameraDistance * Math.cos(cameraRotationY) * Math.cos(cameraRotationX)
+            );
+            camera.transform.setPosition(lamp.get_position().add(offset));
+            camera.look_at(lamp.get_position());
+        }
 
         update_spot_light();
 
@@ -828,6 +824,7 @@ async function main()
                 particles.splice(i, 1);
             }
         }
+
         renderer.submit(scene);
     }
 

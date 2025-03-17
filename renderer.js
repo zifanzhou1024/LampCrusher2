@@ -1351,10 +1351,10 @@ export class Renderer
       return;
 
 
-    const target = new Vector3( 0.0, 0.0, 0.0 );
+    const target = scene.camera.get_position().add( scene.camera.get_forward().multiplyScalar( 4.0 ) );
     const camera = target.clone().sub( scene.directional_light.direction.clone().normalize().multiplyScalar( 10.0 ) );
 
-    this.directional_light_proj      = orthographic_proj( -25, 25, -25, 25, 0.1, 30 );
+    this.directional_light_proj      = orthographic_proj( -35, 35, -35, 35, 0.1, 30 );
     this.directional_light_view      = (new Matrix4()).lookAt( camera, target, new Vector3( 0, 0, 1 ) ).setPosition( camera ).invert();
     this.directional_light_view_proj = (new Matrix4()).multiplyMatrices( this.directional_light_proj, this.directional_light_view );
 
