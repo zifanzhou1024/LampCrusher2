@@ -73,11 +73,9 @@ export function initializeUI() {
     const scorePopupContainer = document.createElement('div');
     scorePopupContainer.id = 'scorePopupContainer';
     scorePopupContainer.style.position = 'absolute';
-    // Position it at the same spot as your score display.
     scorePopupContainer.style.top = '10px';
     scorePopupContainer.style.left = '50%';
     scorePopupContainer.style.transform = 'translateX(-50%)';
-    // Ensure it doesn't block mouse events.
     scorePopupContainer.style.pointerEvents = 'none';
     scorePopupContainer.style.zIndex = '10000';
     document.body.appendChild(scorePopupContainer);
@@ -85,37 +83,37 @@ export function initializeUI() {
     return { startMenu, healthAndScoreElement, scorePopupContainer };
 }
 
-
 export function updateUI(health, score, time) {
     const healthAndScoreElement = document.getElementById('healthAndScore');
     if (healthAndScoreElement) {
         healthAndScoreElement.textContent = `Health: ${Math.floor(health)} | Score: ${score} | Time: ${time.toFixed(2)} s`;
     }
 }
+
 export function spawnScorePopup(increment) {
     const popupContainer = document.getElementById('scorePopupContainer');
     if (!popupContainer) return;
 
     const popup = document.createElement('span');
     popup.className = 'score-popup';
+    // The text content here doesn’t need to include the exclamation mark since the CSS could have added it;
+    // however, we’re leaving it in case you want it explicitly:
     popup.textContent = `+${increment}!`;
 
     // Append the popup to the dedicated container.
     popupContainer.appendChild(popup);
 
-    // Remove the popup after 1 second (adjust if needed)
+    // Remove the popup after 1 second.
     setTimeout(() => {
         popup.remove();
     }, 1000);
 }
 
-
-
 export function displayGameOverScreen(playAgainCallback) {
     const gameOverDiv = document.createElement('div');
     gameOverDiv.id = 'gameOver';
     gameOverDiv.style.position = 'absolute';
-    gameOverDiv.style.top = '60%'; // Adjusted from 50% to 60%
+    gameOverDiv.style.top = '60%';
     gameOverDiv.style.left = '50%';
     gameOverDiv.style.transform = 'translate(-50%, -50%)';
     gameOverDiv.style.textAlign = 'center';

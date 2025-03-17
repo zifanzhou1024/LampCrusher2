@@ -299,8 +299,8 @@ export class PhysicsEngine
                     window.spawnCrushParticles(scene, soft_body.get_position());
                   }
                   console.log("Letter removed! 20 Points");
-                   spawnScorePopup(20);
-                   scene.score += 20;
+                   spawnScorePopup(30);
+                   scene.score += 30;
                    // updateUI(scene.health, scene.score, scene.time);
                   return;
                 }   
@@ -310,7 +310,7 @@ export class PhysicsEngine
 
                 soft_body.currentRestFactor -= 0.33;
                 scene.health += 15;
-                spawnScorePopup(10);
+                spawnScorePopup(15);
                 scene.score += 15;
                 // updateUI(scene.health, scene.score, scene.time);
    
