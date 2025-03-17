@@ -1,0 +1,1 @@
+.score-popup{display:inline-block;font-size:1.5em;color:#fff;animation:popupFade 1s ease-out forwards;margin-left:10px;position:relative;top:5px}@keyframes popupFade{0%{opacity:1;transform:translateY(40px) scale(1)}50%{opacity:1;transform:translateY(20px) scale(1.5)}to{opacity:0;transform:translateY(0) scale(1)}}
