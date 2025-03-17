@@ -1,7 +1,7 @@
 // ui.js
 
 export function initializeUI() {
-    // Create the Start Menu.
+    // Create the initial Start Menu with only "Play Now" and "Demo Mode".
     const startMenu = document.createElement('div');
     startMenu.id = 'startMenu';
     startMenu.style.position = 'absolute';
@@ -19,57 +19,24 @@ export function initializeUI() {
     titleElement.style.color = 'white';
     titleElement.style.marginBottom = '20px';
 
-    // Easy Mode button
-    const easyButton = document.createElement('button');
-    easyButton.textContent = 'Easy Mode';
-    easyButton.style.padding = '10px 20px';
-    easyButton.style.fontSize = '18px';
-    easyButton.style.backgroundColor = '#4CAF50';
-    easyButton.style.color = 'white';
-    easyButton.style.border = 'none';
-    easyButton.style.borderRadius = '5px';
-    easyButton.style.cursor = 'pointer';
-    easyButton.addEventListener('click', () => {
-        if (window.startGame) {
-            window.startGame('easy');
-        }
+    // "Play Now" button to open mode selection.
+    const playNowButton = document.createElement('button');
+    playNowButton.textContent = 'Play Now';
+    playNowButton.style.padding = '10px 20px';
+    playNowButton.style.fontSize = '18px';
+    playNowButton.style.backgroundColor = '#4CAF50';
+    playNowButton.style.color = 'white';
+    playNowButton.style.border = 'none';
+    playNowButton.style.borderRadius = '5px';
+    playNowButton.style.cursor = 'pointer';
+    playNowButton.addEventListener('click', () => {
+        // Remove initial menu.
+        startMenu.remove();
+        // Show mode selection menu.
+        createModeSelectionMenu();
     });
 
-    // Normal Mode button
-    const normalButton = document.createElement('button');
-    normalButton.textContent = 'Normal Mode';
-    normalButton.style.padding = '10px 20px';
-    normalButton.style.fontSize = '18px';
-    normalButton.style.backgroundColor = '#4CAF50';
-    normalButton.style.color = 'white';
-    normalButton.style.border = 'none';
-    normalButton.style.borderRadius = '5px';
-    normalButton.style.cursor = 'pointer';
-    normalButton.style.marginLeft = '10px';
-    normalButton.addEventListener('click', () => {
-        if (window.startGame) {
-            window.startGame('normal');
-        }
-    });
-
-    // Hard Mode button
-    const hardButton = document.createElement('button');
-    hardButton.textContent = 'Hard Mode';
-    hardButton.style.padding = '10px 20px';
-    hardButton.style.fontSize = '18px';
-    hardButton.style.backgroundColor = '#4CAF50';
-    hardButton.style.color = 'white';
-    hardButton.style.border = 'none';
-    hardButton.style.borderRadius = '5px';
-    hardButton.style.cursor = 'pointer';
-    hardButton.style.marginLeft = '10px';
-    hardButton.addEventListener('click', () => {
-        if (window.startGame) {
-            window.startGame('hard');
-        }
-    });
-
-    // Demo Mode button (kept as before)
+    // "Demo Mode" button remains on the initial menu.
     const demoButton = document.createElement('button');
     demoButton.textContent = 'Demo Mode';
     demoButton.style.padding = '10px 20px';
@@ -86,11 +53,9 @@ export function initializeUI() {
         }
     });
 
-    // Append title and buttons to the start menu.
+    // Append title and both buttons to the start menu.
     startMenu.appendChild(titleElement);
-    startMenu.appendChild(easyButton);
-    startMenu.appendChild(normalButton);
-    startMenu.appendChild(hardButton);
+    startMenu.appendChild(playNowButton);
     startMenu.appendChild(demoButton);
     document.body.appendChild(startMenu);
 
@@ -121,6 +86,88 @@ export function initializeUI() {
 
     return { startMenu, healthAndScoreElement, scorePopupContainer };
 }
+
+function createModeSelectionMenu() {
+    // Create the mode selection menu.
+    const modeMenu = document.createElement('div');
+    modeMenu.id = 'modeMenu';
+    modeMenu.style.position = 'absolute';
+    modeMenu.style.top = '70%';
+    modeMenu.style.left = '50%';
+    modeMenu.style.transform = 'translate(-50%, -50%)';
+    modeMenu.style.textAlign = 'center';
+    modeMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    modeMenu.style.padding = '20px';
+    modeMenu.style.borderRadius = '10px';
+    modeMenu.style.zIndex = '9999';
+
+    const modeTitle = document.createElement('h1');
+    modeTitle.textContent = 'Select Mode';
+    modeTitle.style.color = 'white';
+    modeTitle.style.marginBottom = '20px';
+    modeMenu.appendChild(modeTitle);
+
+    // Easy Mode button.
+    const easyButton = document.createElement('button');
+    easyButton.textContent = 'Easy Mode';
+    easyButton.style.padding = '10px 20px';
+    easyButton.style.fontSize = '18px';
+    easyButton.style.backgroundColor = '#4CAF50';
+    easyButton.style.color = 'white';
+    easyButton.style.border = 'none';
+    easyButton.style.borderRadius = '5px';
+    easyButton.style.cursor = 'pointer';
+    easyButton.addEventListener('click', () => {
+        if (window.startGame) {
+            window.startGame('easy');
+        }
+        modeMenu.remove();  // Remove the mode menu after clicking.
+    });
+
+    // Normal Mode button.
+    const normalButton = document.createElement('button');
+    normalButton.textContent = 'Normal Mode';
+    normalButton.style.padding = '10px 20px';
+    normalButton.style.fontSize = '18px';
+    normalButton.style.backgroundColor = '#4CAF50';
+    normalButton.style.color = 'white';
+    normalButton.style.border = 'none';
+    normalButton.style.borderRadius = '5px';
+    normalButton.style.cursor = 'pointer';
+    normalButton.style.marginLeft = '10px';
+    normalButton.addEventListener('click', () => {
+        if (window.startGame) {
+            window.startGame('normal');
+        }
+        modeMenu.remove();  // Remove the mode menu after clicking.
+    });
+
+    // Hard Mode button.
+    const hardButton = document.createElement('button');
+    hardButton.textContent = 'Hard Mode';
+    hardButton.style.padding = '10px 20px';
+    hardButton.style.fontSize = '18px';
+    hardButton.style.backgroundColor = '#4CAF50';
+    hardButton.style.color = 'white';
+    hardButton.style.border = 'none';
+    hardButton.style.borderRadius = '5px';
+    hardButton.style.cursor = 'pointer';
+    hardButton.style.marginLeft = '10px';
+    hardButton.addEventListener('click', () => {
+        if (window.startGame) {
+            window.startGame('hard');
+        }
+        modeMenu.remove();  // Remove the mode menu after clicking.
+    });
+
+    // Append the buttons to the mode menu.
+    modeMenu.appendChild(easyButton);
+    modeMenu.appendChild(normalButton);
+    modeMenu.appendChild(hardButton);
+    document.body.appendChild(modeMenu);
+}
+
+
 
 
 export function updateUI(health, score, time) {
