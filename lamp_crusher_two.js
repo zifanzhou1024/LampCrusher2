@@ -6,7 +6,7 @@ import { PhysicsEngine } from "./physics_engine.js";
 
 import * as THREE from 'three';
 import { Vector2, Vector3, Vector4, Matrix4, Euler } from 'three';
-import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen, spawnScorePopup, displayWinScreen } from './ui.js';
+import { initializeUI, updateUI, displayGameOverScreen, removeGameOverScreen, spawnScorePopup, displayWinScreen, createModeSelectionMenu } from './ui.js';
 
 const canvas = document.getElementById("gl_canvas");
 
@@ -404,6 +404,7 @@ async function main()
         removeGameOverScreen();
         gameStarted = false;
         gameOver = false;
+        gameWin = false;
         currentGameMode = 'intro';
 
         // Reset health & stats for the "intro" state
@@ -439,11 +440,68 @@ async function main()
         lamp.set_euler(new Euler(0, -Math.PI / 2, 0, 'ZXY'));
         lampIsJumping = false;
 
-        // Show start menu again
-        if (startMenu) {
-            startMenu.style.display = 'block';
+        // ---- Recreate only the Start Menu (without duplicating UI elements) ----
+        const existingStartMenu = document.getElementById('startMenu');
+        if (existingStartMenu) {
+            existingStartMenu.remove();
         }
+
+        const startMenu = document.createElement('div');
+        startMenu.id = 'startMenu';
+        startMenu.style.position = 'absolute';
+        startMenu.style.top = '65%';
+        startMenu.style.left = '50%';
+        startMenu.style.transform = 'translate(-50%, -50%)';
+        startMenu.style.textAlign = 'center';
+        startMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        startMenu.style.padding = '20px';
+        startMenu.style.borderRadius = '10px';
+        startMenu.style.zIndex = '9999';
+
+        const titleElement = document.createElement('h1');
+        titleElement.textContent = 'Lamp Crusher 2';
+        titleElement.style.color = 'white';
+        titleElement.style.marginBottom = '20px';
+
+        const playNowButton = document.createElement('button');
+        playNowButton.textContent = 'Play Now';
+        playNowButton.style.padding = '10px 20px';
+        playNowButton.style.fontSize = '18px';
+        playNowButton.style.backgroundColor = '#4CAF50';
+        playNowButton.style.color = 'white';
+        playNowButton.style.border = 'none';
+        playNowButton.style.borderRadius = '5px';
+        playNowButton.style.cursor = 'pointer';
+        playNowButton.addEventListener('click', () => {
+            startMenu.remove();
+            createModeSelectionMenu();
+        });
+
+        const demoButton = document.createElement('button');
+        demoButton.textContent = 'Demo Mode';
+        demoButton.style.padding = '10px 20px';
+        demoButton.style.fontSize = '18px';
+        demoButton.style.backgroundColor = '#4CAF50';
+        demoButton.style.color = 'white';
+        demoButton.style.border = 'none';
+        demoButton.style.borderRadius = '5px';
+        demoButton.style.cursor = 'pointer';
+        demoButton.style.marginLeft = '10px';
+        demoButton.addEventListener('click', () => {
+            if (window.startGame) {
+                window.startGame('demo');
+            }
+            const infoBox = document.getElementById('infoBox');
+            if (infoBox) infoBox.remove();
+            startMenu.remove();
+        });
+
+        startMenu.appendChild(titleElement);
+        startMenu.appendChild(playNowButton);
+        startMenu.appendChild(demoButton);
+        document.body.appendChild(startMenu);
     }
+
 
     // Expose startGame globally for UI access.
     window.startGame = startGame;

@@ -118,7 +118,7 @@ export function initializeUI() {
     return { startMenu, healthAndScoreElement, scorePopupContainer };
 }
 
-function createModeSelectionMenu() {
+export function createModeSelectionMenu() {
     // Create a new menu for selecting the game mode.
     const modeMenu = document.createElement('div');
     modeMenu.id = 'modeMenu';
