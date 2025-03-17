@@ -55,7 +55,7 @@ export class Actor
   constructor( mesh, material, mass )
   {
     this.transform      = new Matrix4();
-    this.prev_transform = null;
+    this.prev_transform = new Matrix4();
     this.velocity       = new Vector3( 0.0, 0.0, 0.0 );
     this.mesh           = mesh;
     this.material       = material;
@@ -1486,7 +1486,7 @@ export class Renderer
     }
     else
     {
-      this.blit.bind( { g_Sampler: this.render_buffers[ RenderBuffers.kPostProcessing ] } );
+      this.blit.bind( { g_Sampler: this.render_buffers[ RenderBuffers.kTAA ] } );
       this.quad.draw();
     }
   }

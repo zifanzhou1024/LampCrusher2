@@ -2,6 +2,8 @@ export const gl = document.getElementById( "gl_canvas" ).getContext( "webgl" );
 gl.canvas.width = window.innerWidth;
 gl.canvas.height = window.innerHeight;
 
+import { Matrix4 } from 'three';
+
 export class GpuDevice
 {
   constructor()
@@ -28,8 +30,18 @@ export class GpuMesh
     this.stride = kModelStdVertexStride;
   }
 
-  draw()
+  draw( model_uniform, model_transform, prev_model_uniform, prev_model_transform )
   {
+    if ( model_uniform )
+    {
+      g_CurrentPSO.set_uniform( model_uniform, model_transform.elements );
+    }
+
+    if ( prev_model_uniform )
+    {
+      g_CurrentPSO.set_uniform( prev_model_uniform, prev_model_transform.elements );
+    }
+
     gl.bindBuffer( gl.ARRAY_BUFFER, this.vertex_buffer );
     gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.index_buffer );
 
