@@ -375,11 +375,19 @@ async function main()
 
 
     function startGame(mode = 'normal') {
-        // When starting the game, switch from the intro state into either normal or demo mode.
-        currentGameMode = mode;  // mode is either 'normal' or 'demo'
+        currentGameMode = mode;  // mode is 'easy', 'normal', 'hard', or 'demo'
         gameStarted = true;
         gameOver = false;
-        scene.health = mode === 'demo' ? 400 : 50;
+
+        // Set starting health: 100 for easy; 50 for normal/hard; demo mode stays 400.
+        if (mode === 'easy') {
+            scene.health = 100;
+        } else if (mode === 'demo') {
+            scene.health = 400;
+        } else {
+            scene.health = 50;
+        }
+
         scene.score = 0;
         startTime = performance.now();
         letterSpawnTimer = 0;
@@ -578,8 +586,12 @@ async function main()
             let healthDecreaseRate = 1 + Math.floor(elapsedTime / 10);
             if (!healthDecreasePaused) {
                 let decreaseAmount = 10 * healthDecreaseRate * dt;
-                if (currentGameMode === 'demo') {
-                    decreaseAmount *= 0.5;
+                if (currentGameMode === 'easy') {
+                    decreaseAmount *= 0.5;  // Health decreases half as fast in easy mode
+                } else if (currentGameMode === 'hard') {
+                    decreaseAmount *= 2.0;  // Health decreases twice as fast in hard mode
+                } else if (currentGameMode === 'demo') {
+                    decreaseAmount *= 0.5;  // Demo mode as before
                 }
                 scene.health -= decreaseAmount;
             }
@@ -590,7 +602,16 @@ async function main()
             updateUI(scene.health, scene.score, elapsedTime);
 
             // --- NEW: Check for win condition.
-            const winThreshold = currentGameMode === 'normal' ? 400 : (currentGameMode === 'demo' ? 300 : Infinity);
+            let winThreshold;
+            if (currentGameMode === 'easy') {
+                winThreshold = 200;
+            } else if (currentGameMode === 'normal') {
+                winThreshold = 300;
+            } else if (currentGameMode === 'hard') {
+                winThreshold = 400;
+            } else if (currentGameMode === 'demo') {
+                winThreshold = 300;  // demo mode remains unchanged, or you can adjust as desired
+            }
             if (scene.score >= winThreshold) {
                 // Clamp score to the threshold and trigger win state.
                 scene.score = winThreshold;
@@ -607,6 +628,9 @@ async function main()
                 letterSpawnTimer = 0;
                 // Speed up spawning as time progresses
                 currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
+                if (currentGameMode === 'hard' || currentGameMode === 'easy') {
+                    currentSpawnInterval /= 1.5;
+                }
             }
         }
 

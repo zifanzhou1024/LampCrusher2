@@ -5,7 +5,7 @@ export function initializeUI() {
     const startMenu = document.createElement('div');
     startMenu.id = 'startMenu';
     startMenu.style.position = 'absolute';
-    startMenu.style.top = '70%'; // Adjusted from 50% to 70%
+    startMenu.style.top = '70%';
     startMenu.style.left = '50%';
     startMenu.style.transform = 'translate(-50%, -50%)';
     startMenu.style.textAlign = 'center';
@@ -19,21 +19,57 @@ export function initializeUI() {
     titleElement.style.color = 'white';
     titleElement.style.marginBottom = '20px';
 
-    const startButton = document.createElement('button');
-    startButton.textContent = 'Start Game';
-    startButton.style.padding = '10px 20px';
-    startButton.style.fontSize = '18px';
-    startButton.style.backgroundColor = '#4CAF50';
-    startButton.style.color = 'white';
-    startButton.style.border = 'none';
-    startButton.style.borderRadius = '5px';
-    startButton.style.cursor = 'pointer';
-    startButton.addEventListener('click', () => {
+    // Easy Mode button
+    const easyButton = document.createElement('button');
+    easyButton.textContent = 'Easy Mode';
+    easyButton.style.padding = '10px 20px';
+    easyButton.style.fontSize = '18px';
+    easyButton.style.backgroundColor = '#4CAF50';
+    easyButton.style.color = 'white';
+    easyButton.style.border = 'none';
+    easyButton.style.borderRadius = '5px';
+    easyButton.style.cursor = 'pointer';
+    easyButton.addEventListener('click', () => {
+        if (window.startGame) {
+            window.startGame('easy');
+        }
+    });
+
+    // Normal Mode button
+    const normalButton = document.createElement('button');
+    normalButton.textContent = 'Normal Mode';
+    normalButton.style.padding = '10px 20px';
+    normalButton.style.fontSize = '18px';
+    normalButton.style.backgroundColor = '#4CAF50';
+    normalButton.style.color = 'white';
+    normalButton.style.border = 'none';
+    normalButton.style.borderRadius = '5px';
+    normalButton.style.cursor = 'pointer';
+    normalButton.style.marginLeft = '10px';
+    normalButton.addEventListener('click', () => {
         if (window.startGame) {
             window.startGame('normal');
         }
     });
 
+    // Hard Mode button
+    const hardButton = document.createElement('button');
+    hardButton.textContent = 'Hard Mode';
+    hardButton.style.padding = '10px 20px';
+    hardButton.style.fontSize = '18px';
+    hardButton.style.backgroundColor = '#4CAF50';
+    hardButton.style.color = 'white';
+    hardButton.style.border = 'none';
+    hardButton.style.borderRadius = '5px';
+    hardButton.style.cursor = 'pointer';
+    hardButton.style.marginLeft = '10px';
+    hardButton.addEventListener('click', () => {
+        if (window.startGame) {
+            window.startGame('hard');
+        }
+    });
+
+    // Demo Mode button (kept as before)
     const demoButton = document.createElement('button');
     demoButton.textContent = 'Demo Mode';
     demoButton.style.padding = '10px 20px';
@@ -50,8 +86,11 @@ export function initializeUI() {
         }
     });
 
+    // Append title and buttons to the start menu.
     startMenu.appendChild(titleElement);
-    startMenu.appendChild(startButton);
+    startMenu.appendChild(easyButton);
+    startMenu.appendChild(normalButton);
+    startMenu.appendChild(hardButton);
     startMenu.appendChild(demoButton);
     document.body.appendChild(startMenu);
 
@@ -82,6 +121,7 @@ export function initializeUI() {
 
     return { startMenu, healthAndScoreElement, scorePopupContainer };
 }
+
 
 export function updateUI(health, score, time) {
     const healthAndScoreElement = document.getElementById('healthAndScore');
