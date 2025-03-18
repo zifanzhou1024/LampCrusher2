@@ -645,14 +645,17 @@ async function main()
             if (!healthDecreasePaused) {
                 let decreaseAmount = 10 * healthDecreaseRate * dt;
                 if (currentGameMode === 'easy') {
-                    decreaseAmount *= 0.5;  // Health decreases half as fast in easy mode
+                    decreaseAmount *= 0.5;  // Easy mode: half speed
+                } else if (currentGameMode === 'harder') {
+                    decreaseAmount *= 2.5;  // Existing hard mode is now even harder (2.5× health decrease)
                 } else if (currentGameMode === 'hard') {
-                    decreaseAmount *= 2.0;  // Health decreases twice as fast in hard mode
+                    decreaseAmount *= 1.5;  // New hard mode: 1.5× health decrease
                 } else if (currentGameMode === 'demo') {
-                    decreaseAmount *= 0.5;  // Demo mode as before
+                    decreaseAmount *= 0.5;  // Demo mode remains unchanged
                 }
                 scene.health -= decreaseAmount;
             }
+
             if (scene.health <= 0) {
                 scene.health = 0;
                 displayGameOver();
@@ -667,11 +670,12 @@ async function main()
                 winThreshold = 300;
             } else if (currentGameMode === 'hard') {
                 winThreshold = 400;
+            } else if (currentGameMode === 'harder') {
+                winThreshold = 400;
             } else if (currentGameMode === 'demo') {
-                winThreshold = 300;  // demo mode remains unchanged, or you can adjust as desired
+                winThreshold = 300;
             }
             if (scene.score >= winThreshold) {
-                // Clamp score to the threshold and trigger win state.
                 scene.score = winThreshold;
                 displayWin();
             }
@@ -686,8 +690,8 @@ async function main()
                 letterSpawnTimer = 0;
                 // Speed up spawning as time progresses
                 currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
-                if (currentGameMode === 'hard' || currentGameMode === 'easy') {
-                    currentSpawnInterval /= 1.5;
+                if (currentGameMode === 'hard' || currentGameMode === 'harder'|| currentGameMode === 'easy') {
+                    currentSpawnInterval /= 2;
                 }
             }
         }

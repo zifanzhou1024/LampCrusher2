@@ -197,10 +197,30 @@ export function createModeSelectionMenu() {
         if(infoBox) infoBox.remove();
     });
 
+    const harderButton = document.createElement('button');
+    harderButton.textContent = 'Harder Mode';
+    harderButton.style.padding = '10px 20px';
+    harderButton.style.fontSize = '18px';
+    harderButton.style.backgroundColor = '#4CAF50';
+    harderButton.style.color = 'white';
+    harderButton.style.border = 'none';
+    harderButton.style.borderRadius = '5px';
+    harderButton.style.cursor = 'pointer';
+    harderButton.style.marginLeft = '10px';
+    harderButton.addEventListener('click', () => {
+        if (window.startGame) {
+            window.startGame('harder');
+        }
+        modeMenu.remove();  // Remove the mode menu after clicking.
+        const infoBox = document.getElementById('infoBox');
+        if(infoBox) infoBox.remove();
+    });
+
     // Append mode buttons to the mode menu.
     modeMenu.appendChild(easyButton);
     modeMenu.appendChild(normalButton);
     modeMenu.appendChild(hardButton);
+    modeMenu.appendChild(harderButton);
     document.body.appendChild(modeMenu);
 }
 
