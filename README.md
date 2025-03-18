@@ -1,71 +1,94 @@
-# LampCrusher2 - Three.js Project
+Below is an updated README.md that reflects the major changes in the project:
 
-This project is a three.js application that loads a lamp model along with several letter models using the OBJ and MTL loaders. It supports basic movement (WASD), jumping, and toggling between first-person and third-person views with the "v" key. The project demonstrates how to work with ES Modules, asset loading, and simple physics within a 3D scene.
+---
+
+# LampCrusher2 – Advanced WebGL Game
+
+LampCrusher2 is an interactive WebGL game that combines Three.js with a custom GPU rendering pipeline and physics engine. Inspired by classic animation, you control a lamp that must crush falling letters. The project features advanced rendering techniques including physically based lighting, shadow mapping, temporal anti-aliasing (TAA), and dynamic post‑processing effects. In addition, a custom physics engine handles realistic movement and collision responses, while a flexible asset loading system supports both glTF and legacy OBJ/MTL models.
+
+---
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Running the Project](#running-the-project)
+    - [Development Mode](#development-mode)
+    - [Production Mode](#production-mode)
+    - [Static Server Alternative](#static-server-alternative)
+- [Usage](#usage)
+- [Additional Resources](#additional-resources)
+
+---
+
+## Project Overview
+
+LampCrusher2 has evolved from a basic Three.js application into a full-fledged game that features:
+
+- **Advanced Rendering:** A custom GPU pipeline with multiple render passes, physically based rendering (PBR), shadow mapping, and temporal anti-aliasing for high-quality visuals.
+- **Custom Physics Engine:** Simulates gravity, collision detection using oriented bounding boxes (OBBs), and spring-based soft-body responses when the lamp crushes letters.
+- **Flexible Asset Loading:** Supports modern glTF models (via GLTFLoader) alongside legacy OBJ/MTL assets.
+- **Dynamic User Interface:** Includes start menus, mode selection, an in-game HUD for health, score, and time, and animated score popups.
+- **Multiple Game Modes:** Offers various difficulty levels and a demo mode for testing.
 
 ---
 
 ## Project Structure
 
+The project is organized as follows:
+
 ```
 LampCrusher2/
-├── assets/
-│   ├── lamp.obj
-│   ├── lamp.mtl
-│   ├── pixar_p.obj
-│   ├── pixar_p.mtl
-│   ├── pixar_i.obj
-│   ├── pixar_i.mtl
-│   ├── pixar_x.obj
-│   ├── pixar_x.mtl
-│   ├── pixar_a.obj
-│   ├── pixar_a.mtl
-│   ├── pixar_r.obj
-│   └── pixar_r.mtl
-├── index.html
-├── lamp_crusher_two.js
-├── ui.js
-├── package.json
-└── node_modules/
+├── LICENSE
+├── README.md
+├── dist/                   # Production build output folder
+├── public/                 # Static assets (e.g., glTF models, textures)
+├── node_modules/           # Installed npm packages
+├── assets/                 # (Legacy) assets for OBJ/MTL models
+├── gpu.js                  # GPU modules for mesh and shader management
+├── renderer.js             # Main rendering pipeline and scene management
+├── physics_engine.js       # Custom physics engine implementation
+├── shaders.js              # GLSL shader source definitions
+├── ui.js                   # User interface code (menus, HUD, popups)
+├── lamp_crusher_two.js     # Main game logic and scene setup
+├── package.json            # Project dependencies and scripts
+├── vite.config.js          # Vite configuration for development/build
+└── (other files such as main.js, ui.css, etc.)
 ```
 
-- **assets/**: Contains all the model and material files required by the project.
-- **index.html**: The main HTML file that loads the JavaScript module.
-- **lamp_crusher_two.js**: The main JavaScript file where the three.js scene, camera, renderer, controls, and animations are set up.
-- **package.json**: Holds your project dependencies and scripts.
-- **node_modules/**: Contains installed npm packages.
+*Note:* The project has undergone significant changes—from a simple Three.js demo to an advanced WebGL game with custom physics, rendering, and UI modules.
 
 ---
 
 ## Prerequisites
 
-- **Node.js**: Ensure you have Node.js installed on your computer. You can download it from [nodejs.org](https://nodejs.org/).
+- **Node.js:** Install Node.js (v12 or above is recommended) from [nodejs.org](https://nodejs.org/).
+- **npm:** Node Package Manager (bundled with Node.js).
 
 ---
 
 ## Installation
 
-1. **Clone or Download the Project**
-
-   Clone the repository or download the project files into your preferred directory.
-
-2. **Initialize the Project**
-
-   Open a terminal in the project directory.
-
-3. **Install Dependencies**
-
-   Install three.js and Vite (a build tool) by running:
+1. **Clone the Repository**
 
    ```bash
-   npm install --save three
-   npm install --save-dev vite
+   git clone https://github.com/your_username/LampCrusher2.git
+   cd LampCrusher2
    ```
 
-   This will create a `node_modules` folder and update your `package.json` file with the necessary dependencies.
+2. **Install Dependencies**
 
-4. **(Optional) Add a Start Script**
+   Run the following command to install the required packages:
 
-   You can add a script to your `package.json` to easily start the development server. Open your `package.json` file and add the following under `"scripts"`:
+   ```bash
+   npm install
+   ```
+
+3. **(Optional) Update Start Scripts**
+
+   Ensure your `package.json` includes:
 
    ```json
    "scripts": {
@@ -85,71 +108,68 @@ LampCrusher2/
    In your terminal, run:
 
    ```bash
-   npx vite
-   ```
-
-   or if you added the start script:
-
-   ```bash
    npm run dev
+   ```
+   or
+   ```bash
+   npx vite
    ```
 
 2. **Open the Application**
 
-   Once Vite starts, it will output a URL (e.g., `http://localhost:5173`). Open that URL in your web browser to see your project in action.
+   Once Vite starts, it will output a URL (e.g., `http://localhost:5173`). Open this URL in your browser.
 
-> **Note:** Because the project uses ES Modules and dynamic asset loading, it must be served from a local server. Opening `index.html` directly in the browser (via double-click) may lead to issues.
+   > **Note:** The project uses ES Modules and dynamic asset loading, so it must be served from a local server rather than opened directly from the filesystem.
 
 ### Production Mode
 
-When you're ready to deploy your project, build it using:
-
-```bash
-npx vite build
-```
-
-or:
+To compile and optimize the project for deployment:
 
 ```bash
 npm run build
 ```
 
-This command will compile and optimize your project files and output them into a `dist/` folder. You can then host the contents of this folder on your web server.
+The output files will be placed in the `dist/` folder. You can host these files on your preferred web server.
 
-### Alternative: Running with a Static Server
+### Static Server Alternative
 
-If you prefer not to use Vite, you can use a static server to serve your files. For example, install the `serve` package globally or use `npx`:
+If you prefer not to use Vite, you can serve the project using a static server:
 
 ```bash
-npx serve .
+npx serve dist
 ```
 
-Then, open the provided URL (e.g., `http://localhost:3000`) in your browser.
+Then open the provided URL (e.g., `http://localhost:3000`) in your browser.
 
 ---
 
 ## Usage
 
 - **Movement Controls:**
-    - **W/A/S/D:** Move the lamp model around the scene.
+    - **W/A/S/D:** Move the lamp around the scene.
     - **Space Bar:** Make the lamp jump.
-    - **Mouse Movement:** Controls the camera rotation. Click on the rendered canvas to lock the pointer for full mouse control.
+    - **Mouse Movement:** Controls camera rotation. Click the canvas to lock the pointer.
 
 - **View Mode Toggle:**
-    - **V Key:** Toggle between first-person and third-person views.
-        - **First-Person View:** Camera attaches to the lamp.
-        - **Third-Person View:** Camera orbits around the lamp.
+    - **V Key:** Toggle between first-person view (camera attached to the lamp) and third-person view (camera orbits the lamp).
 
-- **Asset Loading:**  
-  The project loads a lamp model and several letter models from the `assets/` folder using the OBJLoader and MTLLoader from three.js addons.
-- **Demo Mode:**  
-  Use `P` to pause the decrease of health for better testing purposes.  
+- **Game Modes:**
+    - **Start Menu & Mode Selection:** Upon launch, select from multiple game modes (Easy, Normal, Hard, Harder, or Demo).
+    - **Demo Mode:** Press `P` to pause health decrease for testing purposes.
+
+- **Asset Loading:**
+    - The project now supports modern glTF models (loaded via GLTFLoader) along with legacy OBJ/MTL formats, offering greater flexibility in asset management.
+
+- **Special Effects:**
+    - Enjoy advanced visual effects such as PBR lighting, dynamic shadow mapping, TAA for smoother visuals, and custom smoke effects triggered during gameplay events.
 
 ---
 
 ## Additional Resources
 
-- **three.js Documentation:** [threejs.org/docs](https://threejs.org/docs/)
+- **Three.js Documentation:** [threejs.org/docs](https://threejs.org/docs/)
 - **Vite Documentation:** [vitejs.dev/guide](https://vitejs.dev/guide/)
 - **Node.js:** [nodejs.org](https://nodejs.org/)
+- **WebGL Guides:** See MDN Web Docs for comprehensive WebGL resources.
 
+---
