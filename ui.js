@@ -124,7 +124,7 @@ export function createModeSelectionMenu() {
     const modeMenu = document.createElement('div');
     modeMenu.id = 'modeMenu';
     modeMenu.style.position = 'absolute';
-    modeMenu.style.top = '70%';
+    modeMenu.style.top = '65%';
     modeMenu.style.left = '50%';
     modeMenu.style.transform = 'translate(-50%, -50%)';
     modeMenu.style.textAlign = 'center';
