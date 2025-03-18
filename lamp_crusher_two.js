@@ -643,7 +643,7 @@ async function main()
                 if (currentGameMode === 'easy') {
                     decreaseAmount *= 0.5;  // Easy mode: half speed
                 } else if (currentGameMode === 'harder') {
-                    decreaseAmount *= 2.5;  // Existing hard mode is now even harder (2.5× health decrease)
+                    decreaseAmount *= 2.0;  // Existing hard mode is now even harder (2.0× health decrease)
                 } else if (currentGameMode === 'hard') {
                     decreaseAmount *= 1.5;  // New hard mode: 1.5× health decrease
                 } else if (currentGameMode === 'demo') {
