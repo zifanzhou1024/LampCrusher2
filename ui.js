@@ -87,6 +87,7 @@ export function initializeUI() {
         '- Easy Mode: 200 points<br>' +
         '- Normal Mode: 300 points<br>' +
         '- Hard Mode: 400 points<br>' +
+        '- Harder Mode: 400 points<br>' +
         'Avoid running out of health to win the game!';
     document.body.appendChild(infoBox);
 
