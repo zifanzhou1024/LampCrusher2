@@ -687,7 +687,7 @@ async function main()
                 // Speed up spawning as time progresses
                 currentSpawnInterval = Math.max(0.5, 2 - elapsedTime * 0.1);
                 if (currentGameMode === 'hard' || currentGameMode === 'harder'|| currentGameMode === 'easy') {
-                    currentSpawnInterval /= 2;
+                    currentSpawnInterval /= 3;
                 }
             }
         }
