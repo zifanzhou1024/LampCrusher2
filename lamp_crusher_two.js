@@ -49,13 +49,9 @@ const particles = [];
 // A Particle is an Actor that uses a small black cube.
 // It lives for a short time and then is removed.
 class Particle extends Actor {
-    constructor() {
-        const particleMaterial = new Material(
-            kShaders.PS_PBRMaterial,
-            { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 1.0, g_Metallic: 0.0 }
-        );
+    constructor(material) {
         // mass 0 because these particles are nonphysical.
-        super(kCubeMesh, particleMaterial, 0.0);
+        super(kCubeMesh, material, 0.0);
         // Set a smaller scale for the particle so it's more like a tiny square piece.
         this.set_scale(new Vector3(0.2, 0.2, 0.2));
         this.lifetime = 0.8;  // shorter lifetime for a burst effect
@@ -74,30 +70,6 @@ class Particle extends Actor {
         }
     }
 }
-
-
-function spawnCrushParticles(scene, position) {
-    // If the letter is near the lamp, offset the spawn position upward
-    if (window.lamp && position.distanceTo(window.lamp.get_position()) < 5) {
-        position = position.clone().add(new Vector3(0, 1, 0));
-    }
-    const particleCount = 15;  // Number of particles per crushed letter
-    for (let i = 0; i < particleCount; i++) {
-        const particle = new Particle();
-        particle.set_position(position.clone());
-        // Generate a random upward direction:
-        const theta = Math.random() * 2 * Math.PI;             // azimuth (full circle)
-        const alpha = Math.random() * (Math.PI / 2);             // polar angle from vertical (0 = up, π/2 = horizontal)
-        const speed = Math.random() * 30 + 10; // speed between 10 and 40 units/sec
-        const vx = speed * Math.sin(alpha) * Math.cos(theta);
-        const vy = speed * Math.cos(alpha);  // always non-negative
-        const vz = speed * Math.sin(alpha) * Math.sin(theta);
-        particle.velocity = new Vector3(vx, vy, vz);
-        scene.add(particle);
-        particles.push(particle);
-    }
-}
-window.spawnCrushParticles = spawnCrushParticles;
 
 
 
@@ -219,10 +191,11 @@ async function main()
 
 
 
-    const letterMaterial = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 0.1, g_Metallic: 0.5 });
-    const lampMaterial   = new SkinnedMaterial(kShaders.PS_PBRMaterial, { g_Diffuse: [1.0, 1.0, 1.0], g_Roughness: 0.1, g_Metallic: 0.5 });
-    const lampModel      = await load_gltf_model('lamp.glb', new Matrix4().makeRotationX( Math.PI / 2 ).multiply( new Matrix4().makeScale( 3, 3, 3 ) ));
-    const letterModels   = {
+    const letterMaterial   = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 0.1, g_Metallic: 0.5 });
+    const lampMaterial     = new SkinnedMaterial(kShaders.PS_PBRMaterial, { g_Diffuse: [1.0, 1.0, 1.0], g_Roughness: 0.1, g_Metallic: 0.5 });
+    const particleMaterial = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 1.0, g_Metallic: 0.0 });
+    const lampModel        = await load_gltf_model('lamp.glb', new Matrix4().makeRotationX( Math.PI / 2 ).multiply( new Matrix4().makeScale( 3, 3, 3 ) ));
+    const letterModels     = {
       'p': await load_gltf_model('pixar_p.glb'),
       'i': await load_gltf_model('pixar_i.glb'),
       'x': await load_gltf_model('pixar_x.glb'),
@@ -273,6 +246,29 @@ async function main()
       spawnStaticLetter('a',  4, 0, 0);
       spawnStaticLetter('r',  8, 0, 0);
     }
+
+    const spawnCrushParticles = (scene, position) => {
+      // If the letter is near the lamp, offset the spawn position upward
+      if (window.lamp && position.distanceTo(window.lamp.get_position()) < 5) {
+        position = position.clone().add(new Vector3(0, 1, 0));
+      }
+      const particleCount = 15;  // Number of particles per crushed letter
+      for (let i = 0; i < particleCount; i++) {
+        const particle = new Particle(particleMaterial);
+        particle.set_position(position.clone());
+        // Generate a random upward direction:
+        const theta = Math.random() * 2 * Math.PI;             // azimuth (full circle)
+        const alpha = Math.random() * (Math.PI / 2);             // polar angle from vertical (0 = up, π/2 = horizontal)
+        const speed = Math.random() * 30 + 10; // speed between 10 and 40 units/sec
+        const vx = speed * Math.sin(alpha) * Math.cos(theta);
+        const vy = speed * Math.cos(alpha);  // always non-negative
+        const vz = speed * Math.sin(alpha) * Math.sin(theta);
+        particle.velocity = new Vector3(vx, vy, vz);
+        scene.add(particle);
+        particles.push(particle);
+      }
+    }
+    window.spawnCrushParticles = spawnCrushParticles;
 
     // ----- Ground -----
     const ground = new Actor(
