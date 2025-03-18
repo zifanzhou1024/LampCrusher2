@@ -252,7 +252,7 @@ async function main()
       if (window.lamp && position.distanceTo(window.lamp.get_position()) < 5) {
         position = position.clone().add(new Vector3(0, 1, 0));
       }
-      const particleCount = 15;  // Number of particles per crushed letter
+      const particleCount = 30;  // Number of particles per crushed letter
       for (let i = 0; i < particleCount; i++) {
         const particle = new Particle(particleMaterial);
         particle.set_position(position.clone());
