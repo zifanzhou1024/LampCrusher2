@@ -139,6 +139,12 @@ If you prefer not to use Vite, you can serve the project using a static server:
 npx serve dist
 ```
 
+Or 
+
+```bash
+npm run serve
+```
+
 Then open the provided URL (e.g., `http://localhost:3000`) in your browser.
 
 ---

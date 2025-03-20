@@ -4,9 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
+    "serve": "npx serve dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

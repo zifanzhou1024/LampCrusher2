@@ -135,6 +135,7 @@ To run the project locally:
 3. **Build for Production:**
    ```bash
    npm run build
+   npm run serve
    ```
 
 ---
