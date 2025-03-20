@@ -117,7 +117,7 @@ LampCrusher2/
 
 2. **Open the Application**
 
-   Once Vite starts, it will output a URL (e.g., `http://localhost:5173`). Open this URL in your browser.
+   Once Vite starts, it will output a URL (e.g., `http://localhost:3000`). Open this URL in your browser.
 
    > **Note:** The project uses ES Modules and dynamic asset loading, so it must be served from a local server rather than opened directly from the filesystem.
 
