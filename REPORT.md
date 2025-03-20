@@ -158,9 +158,9 @@ To run the project locally:
 
 ---
 
-## Conclusion
+## Resources
 
-Lamp Crusher 2 represents a comprehensive project that integrates modern web-based 3D rendering techniques with custom physics and shader programming. The project successfully combines artistic inspiration with technical innovation to deliver an engaging and visually appealing game experience. The modular design and use of advanced rendering pipelines (including PBR, shadow mapping, and TAA) lay a strong foundation for future enhancements and scalability.
+- Lamp model: https://sketchfab.com/3d-models/pixar-lamp-f97d17ac89a14ff68c3e488c69340b44 (NOTE: We rigged and animated the model ourselves, however the unskinned model is from here)
 
 ---
 
