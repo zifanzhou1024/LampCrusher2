@@ -54,31 +54,68 @@ Lamp Crusher 2 is an interactive WebGL game inspired by the iconic Pixar lamp. I
 
 The rendering system is built on top of WebGL with additional help from Three.js. Key components include:
 
-- **PBR Materials:** Materials use physically based properties of roughness, metalness, and diffuse to accurately represent their values.
+- **PBR Materials:** Materials use physically based properties of roughness, metalness, and diffuse to accurately represent their values. 
+   - **Shaders:**
+     - The physically‑based material shader (`PS_PBRMaterial`) is defined in **`shaders.js`** (roughly lines **50–100**). 
+   - **G‑Buffer Creation & PBR Buffer:**
+     - Initialization of the GBuffers (diffuse/metallic, normals/roughness, velocity, depth) is done in **`renderer.js`** (inside the `init_gbuffer` function, roughly lines **100–200**).
+     - The PBR lighting buffer setup is implemented in **`renderer.js`** (in `init_pbr_buffer`, roughly lines **350–400**).
 - **Deferred Rendering Setup:** Separate GBuffers are used to render PBR material data, velocity, and other parameters.
 - **Shadow Mapping:** Directional shadows are computed using an orthographic projection.
+  - **Shadow Map Initialization:**
+    - The creation of the directional shadow map (using an orthographic projection) is implemented in **`renderer.js`** in the `init_shadow_maps` function (around lines **450–500**).
+  - **Shadow Rendering Pass:**
+    - The directional shadow pass is handled in **`renderer.js`** within the `render_handler_directional_shadow` function (roughly lines **500–550**).
 - **Lighting:** Lighting is computed by rendering a fullscreen quad and using the cook-torrance BRDF for specular with lambert diffuse. Shadows are sampled and filtered using PCF filtering.
+  - The lighting pass—using a fullscreen quad, cook‑torrance BRDF, and PCF for shadow filtering—is implemented in **`renderer.js`** (in the `render_handler_lighting` function, around lines **600–650**).
 - **Tone Mapping:** Tone mapping is applied before TAA with an sRGB 2.2 gamma compression transfer function and an ACES approximation. It is applied before TAA to reduce variance.
+  - The tone mapping shader (`PS_Tonemapping`) is defined in **`shaders.js`** (approximately lines **450–500**).
 - **Temporal Anti-Aliasing:** TAA is applied using the velocity, previous velocity, current jittered lighting, depth, and an accumulation buffer smooth aliasing artifacts. We use velocity disocclusion and color clamping to reduce ghosting and disocclusion artifacts.
-
+  - The TAA render pass is set up in **`renderer.js`** (in the `render_handler_taa` function, roughly lines **650–700**).
+  - The corresponding TAA shader (`PS_TAA`) is defined in **`shaders.js`** (around lines **500–550**).
 ### Animation Skinning
 
 Animation is implemented using bone matrices with inverse bind pose being applied. The steps are:
 
 - **Load GLTF Model:** Models with their skinned vertices, bones, and animation clips are loaded by the load function into custom skinned model classes
+  - **GLTF Model Loading:**
+    - The function `load_gltf_model` that loads GLTF files and processes skinned meshes is implemented in **`renderer.js`** (roughly lines **300–400**).
+  - **Skeleton and Skinning Data:**
+    - The classes for handling skinned models (including `SkinnedModel` and `Skeleton`) and the inverse bind pose calculations are in **`renderer.js`** (approximately lines **700–800**).
 - **Calculate Inverse Bind Pose:** The inverse bind pose matrices are calculated using forward kinematics and applying the matrix inverse on the transform. These are stored permanently.
+  -   - Within the **`Skeleton`** class in **`renderer.js`** (roughly lines **650–700**) the inverse bind pose is calculated and stored.
 - **Interpolate Bone Matrices:** Gameplay code can tell a skinned model which animation and time t (0-1 normalized) is used and the animation clip with position/rotation data is interpolated using lerp and slerp. These are formed into bone matrices using forward kinematics.
+   - The class **`AnimClip`** (and its helper **`AnimTrack`**) in **`renderer.js`** provides the function `get_bone_transform(bone_idx, t)`. This interpolation logic is implemented roughly around **lines 500–600**.
 - **Inverse Bind Pose:** The inverse bind pose is applied to all of the bone matrices before handing off to the shader. This makes sure vertices are not displaced "twice".
+  - In the **`Skeleton`** class’s `update_anim` method in **`renderer.js`**, after computing each bone’s world transform (using the interpolated data), the inverse bind pose is multiplied into the bone matrix. This ensures that the vertex positions are not displaced twice when skinning is applied. This application occurs roughly around **lines 700–800**.
 - **Custom Skinning Vertex Shader:** VS_ModelSkinned uses the bone matrices to transform vertices of every model with up to 2 bones of influence. This then goes through the normal deferred rendering pipeline.
+   - The shader `VS_ModelSkinned` that transforms vertices with up to two bone influences is defined in **`shaders.js`** (roughly lines **100–150**)
 
 ### Physics Engine
 
 The custom physics engine, implemented in `physics_engine.js`, features:
 
 - **Fixed Timestep Integration:** Instead of using delta time, a fixed update loop runs based on how much time has passed in order to "catch" up to the frame that will land on glass.
+  -   - The physics update loop that uses a fixed timestep (ensuring stable integration for motion and collisions) is implemented in **`physics_engine.js`** (roughly lines **150–350**).
 - **Collision Detection:** Oriented bounding boxes (OBBs) are computed and used to detect and resolve collisions between the lamp and falling letters.
+  - **OBB Calculation:**
+    - Functions such as `getOBB`, `computeOBBCorners`, and `obbIntersect`—used to compute oriented bounding boxes and test collisions—are implemented in **`physics_engine.js`** (roughly in the first **150 lines**).
+  - **Collision Resolution & Spring Forces:**
+    - The code handling soft‑body responses (using spring‑based forces for realistic letter squashing when the lamp lands) is in **`physics_engine.js`** (roughly lines **150–350**).
 - **Spring-Based Responses:** Implements soft-body physics for realistic letter squashing and bounce responses when the lamp stomps on them.
+   - The code computes spring forces based on the difference between the letter's rest height and its current compressed state and applies damping through a spring damping coefficient. This spring‑based collision response logic is integrated into the collision resolution loop, roughly around **lines 150–350**.
 - **Gravity and Friction:** Gravity is applied to all actors, and friction is simulated when objects interact with the ground.
+   - When actors interact with the ground, friction is simulated by computing a tangential damping force from the actor's horizontal velocity and applying a friction coefficient. This implementation is also found in **`physics_engine.js`** (roughly lines **150–350**).
+
+### Particle System
+   - **Particle Creation and Initialization:**
+      - When a letter is crushed, a burst of particles (e.g., debris or smoke fragments) is generated by calling the function `spawnCrushParticles`.
+      - This function is implemented in **`lamp_crusher_two.js`** (roughly lines **300–350**) where particles are created with randomized positions, velocities, and lifetimes.
+   - **Particle Lifecycle and Update:**
+      - The particle update logic—which advances each particle’s position based on its velocity and decrements its lifetime—is integrated into the main game loop in **`lamp_crusher_two.js`** (roughly lines **800–850**).
+      - Expired particles are removed from the scene during these update passes.
+   - **Integration with Rendering:**
+      - The particles are rendered using a basic mesh and associated shader (sharing aspects of the deferred rendering pipeline) as set up in **`renderer.js`**.
 
 ### User Interface
 
@@ -112,8 +149,15 @@ The project is divided into several key files:
 ### Physics and Collision Handling
 
 - **Verlet Integration:** Actor positions are updated using a form of velocity verlet integration to simulate motion.
+  - This integration logic is implemented in **`physics_engine.js`** (roughly lines **300–350**).
 - **OBB Collision Resolution:** The physics engine computes oriented bounding boxes for actors and resolves collisions based on minimum translation vectors (MTVs).
+  -   - The OBB computation functions (e.g. `getOBB`, `computeOBBCorners`, `obbIntersect`) are found in **`physics_engine.js`** (roughly lines **50–150**), while the collision resolution using MTVs is handled in the later sections (roughly lines **150–350**).
 - **Spring Forces:** Soft-body responses simulate letter deformation when the lamp lands on them, awarding points and adjusting health.
+  - This spring force implementation is also part of the collision resolution logic in **`physics_engine.js`** (roughly lines **150–350**).
+
+
+
+
 
 ---
 
