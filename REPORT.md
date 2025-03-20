@@ -1,5 +1,3 @@
----
-
 # Lamp Crusher 2 – Technical Project Report
 
 **Authors:**
