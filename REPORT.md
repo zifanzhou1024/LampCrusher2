@@ -57,39 +57,44 @@ The rendering system is built on top of WebGL with additional help from Three.js
 - **PBR Materials:** Materials use physically based properties of roughness, metalness, and diffuse to accurately represent their values. 
    - **Shaders:**
      - The physically‑based material shader (`PS_PBRMaterial`) is defined in **`shaders.js`** (roughly lines **50–100**). 
-   - **G‑Buffer Creation & PBR Buffer:**
-     - Initialization of the GBuffers (diffuse/metallic, normals/roughness, velocity, depth) is done in **`renderer.js`** (inside the `init_gbuffer` function, roughly lines **100–200**).
-     - The PBR lighting buffer setup is implemented in **`renderer.js`** (in `init_pbr_buffer`, roughly lines **350–400**).
 - **Deferred Rendering Setup:** Separate GBuffers are used to render PBR material data, velocity, and other parameters.
+   - **GBuffer Creation:**
+     - Initialization of the GBuffers (diffuse/metallic, normals/roughness, velocity, depth) is done in **`renderer.js`** (inside the `init_gbuffer` function, roughly lines **1000–1180**).
+     - The PBR lighting buffer setup is implemented in **`renderer.js`** (in `init_pbr_buffer`, roughly lines **1180–1210**).
+   - **Material Rendering Pass:**
+     - Rendering to GBuffers is done in **`renderer.js`** (in `render_handler_gbuffer`, roughly lines **1300-1340**).
+     - The shader used is in **`shaders.js`** (`PS_PBRMaterial`, roughly lines **96-137**).
 - **Shadow Mapping:** Directional shadows are computed using an orthographic projection.
   - **Shadow Map Initialization:**
-    - The creation of the directional shadow map (using an orthographic projection) is implemented in **`renderer.js`** in the `init_shadow_maps` function (around lines **450–500**).
+    - The creation of the directional shadow map (using an orthographic projection) is implemented in **`renderer.js`** in the `init_shadow_maps` function (around lines **1280–1300**).
   - **Shadow Rendering Pass:**
-    - The directional shadow pass is handled in **`renderer.js`** within the `render_handler_directional_shadow` function (roughly lines **500–550**).
+    - The directional shadow pass is handled in **`renderer.js`** within the `render_handler_directional_shadow` function (roughly lines **1340–1380**).
 - **Lighting:** Lighting is computed by rendering a fullscreen quad and using the cook-torrance BRDF for specular with lambert diffuse. Shadows are sampled and filtered using PCF filtering.
-  - The lighting pass—using a fullscreen quad, cook‑torrance BRDF, and PCF for shadow filtering—is implemented in **`renderer.js`** (in the `render_handler_lighting` function, around lines **600–650**).
+  - The lighting pass—using a fullscreen quad, cook‑torrance BRDF, and PCF for shadow filtering—is implemented in **`renderer.js`** (in the `render_handler_lighting` function, around lines **1420–1460**).
+  - The shader used is in **`shaders.js`** (`PS_StandardBrdf`, roughly lines **166-424**).
 - **Tone Mapping:** Tone mapping is applied before TAA with an sRGB 2.2 gamma compression transfer function and an ACES approximation. It is applied before TAA to reduce variance.
-  - The tone mapping shader (`PS_Tonemapping`) is defined in **`shaders.js`** (approximately lines **450–500**).
+  - The tone mapping shader (`PS_Tonemapping`) is defined in **`shaders.js`** (approximately lines **530–560**).
 - **Temporal Anti-Aliasing:** TAA is applied using the velocity, previous velocity, current jittered lighting, depth, and an accumulation buffer smooth aliasing artifacts. We use velocity disocclusion and color clamping to reduce ghosting and disocclusion artifacts.
   - The TAA render pass is set up in **`renderer.js`** (in the `render_handler_taa` function, roughly lines **650–700**).
-  - The corresponding TAA shader (`PS_TAA`) is defined in **`shaders.js`** (around lines **500–550**).
+  - The corresponding TAA shader (`PS_TAA`) is defined in **`shaders.js`** (around lines **430–530**).
+
 ### Animation Skinning
 
 Animation is implemented using bone matrices with inverse bind pose being applied. The steps are:
 
 - **Load GLTF Model:** Models with their skinned vertices, bones, and animation clips are loaded by the load function into custom skinned model classes
   - **GLTF Model Loading:**
-    - The function `load_gltf_model` that loads GLTF files and processes skinned meshes is implemented in **`renderer.js`** (roughly lines **300–400**).
+    - The function `load_gltf_model` that loads GLTF files and processes skinned meshes is implemented in **`renderer.js`** (roughly lines **625–800**).
   - **Skeleton and Skinning Data:**
-    - The classes for handling skinned models (including `SkinnedModel` and `Skeleton`) and the inverse bind pose calculations are in **`renderer.js`** (approximately lines **700–800**).
+    - The classes for handling skinned models (including `SkinnedModel` and `Skeleton`) in **`renderer.js`**.
 - **Calculate Inverse Bind Pose:** The inverse bind pose matrices are calculated using forward kinematics and applying the matrix inverse on the transform. These are stored permanently.
-  -   - Within the **`Skeleton`** class in **`renderer.js`** (roughly lines **650–700**) the inverse bind pose is calculated and stored.
+  -   - Within the **`Skeleton`** class in **`renderer.js`** (roughly lines **260–300**) the inverse bind pose is calculated and stored.
 - **Interpolate Bone Matrices:** Gameplay code can tell a skinned model which animation and time t (0-1 normalized) is used and the animation clip with position/rotation data is interpolated using lerp and slerp. These are formed into bone matrices using forward kinematics.
-   - The class **`AnimClip`** (and its helper **`AnimTrack`**) in **`renderer.js`** provides the function `get_bone_transform(bone_idx, t)`. This interpolation logic is implemented roughly around **lines 500–600**.
+   - The class **`AnimClip`** (and its helper **`AnimTrack`**) in **`renderer.js`** provides the function `get_bone_transform(bone_idx, t)`. This interpolation logic is implemented roughly around **lines 200–235**.
 - **Inverse Bind Pose:** The inverse bind pose is applied to all of the bone matrices before handing off to the shader. This makes sure vertices are not displaced "twice".
-  - In the **`Skeleton`** class’s `update_anim` method in **`renderer.js`**, after computing each bone’s world transform (using the interpolated data), the inverse bind pose is multiplied into the bone matrix. This ensures that the vertex positions are not displaced twice when skinning is applied. This application occurs roughly around **lines 700–800**.
+  - In the **`Skeleton`** class’s `update_anim` method in **`renderer.js`**, after computing each bone’s world transform (using the interpolated data), the inverse bind pose is multiplied into the bone matrix. This ensures that the vertex positions are not displaced twice when skinning is applied. This application occurs roughly around **lines 317–330**.
 - **Custom Skinning Vertex Shader:** VS_ModelSkinned uses the bone matrices to transform vertices of every model with up to 2 bones of influence. This then goes through the normal deferred rendering pipeline.
-   - The shader `VS_ModelSkinned` that transforms vertices with up to two bone influences is defined in **`shaders.js`** (roughly lines **100–150**)
+   - The shader `VS_ModelSkinned` that transforms vertices with up to two bone influences is defined in **`shaders.js`** (roughly lines **43–94**)
 
 ### Physics Engine
 
