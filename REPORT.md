@@ -33,7 +33,7 @@
 
 ## Introduction
 
-Lamp Crusher 2 is an interactive WebGL game inspired by the iconic Pixar lamp. In this project, players control a lamp that crushes falling letters in a dynamic, stylized 3D environment. The gameplay is fast-paced, with a focus on physics-driven animations, responsive controls, and visually engaging effects. The project combines modern web-based 3D rendering (via Three.js and custom WebGL code) with physically-based rendering and a custom physics engine to simulate realistic movement, collisions, and special effects such as smoke.
+Lamp Crusher 2 is an interactive WebGL game inspired by the iconic Pixar lamp. In this project, players control a lamp that crushes falling letters in a dynamic, stylized 3D environment. The gameplay is fast-paced, with a focus on physics-driven animations, responsive controls, and visually engaging effects. The project combines modern web-based 3D rendering (via Three.js and custom WebGL code) with physically-based rendering and a custom physics engine to simulate realistic movement, and collisions.
 
 ---
 
@@ -145,7 +145,7 @@ To run the project locally:
 
 - **Performance Optimization:** Balancing high-quality post-processing (TAA, PBR lighting) with real-time performance on the web.
 - **Physics Accuracy:** Implementing stable and responsive collision detection and resolution with soft-body dynamics.
-- **Shader Complexity:** Developing and debugging advanced shaders (such as the smoke effect and TAA) required careful tuning and validation.
+- **Shader Complexity:** Developing and debugging advanced shaders (such as TAA or skinning) required careful tuning and validation.
 
 ### Future Improvements
 
