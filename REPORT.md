@@ -1,5 +1,3 @@
-Below is an example report in Markdown format summarizing the project:
-
 ---
 
 # Lamp Crusher 2 – Technical Project Report
@@ -20,13 +18,13 @@ Below is an example report in Markdown format summarizing the project:
 2. [Project Objectives](#project-objectives)
 3. [Architecture & Design](#architecture--design)
     - [Rendering Engine](#rendering-engine)
+    - [Animation Skinning](#animation-skinning)
     - [Physics Engine](#physics-engine)
     - [Asset Loading and Shaders](#asset-loading-and-shaders)
     - [User Interface](#user-interface)
 4. [Implementation Details](#implementation-details)
     - [Core Technologies](#core-technologies)
     - [Modular Structure](#modular-structure)
-    - [Rendering Pipeline](#rendering-pipeline)
     - [Physics and Collision Handling](#physics-and-collision-handling)
     - [Special Effects](#special-effects)
 5. [Development Environment](#development-environment)
@@ -45,7 +43,7 @@ Lamp Crusher 2 is an interactive WebGL game inspired by the iconic Pixar lamp. I
 
 - **Gameplay:** Create an engaging game where the player controls a lamp to crush falling letters while managing health and scoring points.
 - **Visuals:** Develop a stylized 3D environment with high-quality lighting, shadows, and post-processing effects that echo classic animation aesthetics.
-- **Physics:** Implement a custom physics engine that handles gravity, collision detection, and response between dynamic objects.
+- **Physics:** Implement a custom physics engine that handles gravity, collision detection, soft-body interactions, and response between dynamic objects.
 - **Animation:** Use joint-based skinning and procedural animation techniques to bring the lamp and letters to life.
 - **User Experience:** Design an intuitive user interface (UI) that includes mode selection, a start menu, in-game HUD, and dynamic score popups.
 - **Performance:** Leverage modern web technologies and optimization strategies (such as Temporal Anti-Aliasing and multiple render passes) to ensure smooth gameplay.
@@ -58,27 +56,31 @@ Lamp Crusher 2 is an interactive WebGL game inspired by the iconic Pixar lamp. I
 
 The rendering system is built on top of WebGL with additional help from Three.js. Key components include:
 
-- **G-Buffer Setup:** Multiple render targets are used to store diffuse, normal, roughness, and velocity data.
-- **Shadow Mapping:** Directional shadows are computed using an orthographic projection and a dedicated framebuffer.
-- **Post-Processing Pipeline:** A sequence of shader passes (PBR lighting, TAA, tone mapping) is applied to achieve a high-quality final image.
-- **Smoke Effects:** A custom smoke shader renders dynamic smoke effects, triggered upon events like landing after a jump.
+- **PBR Materials:** Materials use physically based properties of roughness, metalness, and diffuse to accurately represent their values.
+- **Deferred Rendering Setup:** Separate GBuffers are used to render PBR material data, velocity, and other parameters.
+- **Shadow Mapping:** Directional shadows are computed using an orthographic projection.
+- **Lighting:** Lighting is computed by rendering a fullscreen quad and using the cook-torrance BRDF for specular with lambert diffuse. Shadows are sampled and filtered using PCF filtering.
+- **Tone Mapping:** Tone mapping is applied before TAA with an sRGB 2.2 gamma compression transfer function and an ACES approximation. It is applied before TAA to reduce variance.
+- **Temporal Anti-Aliasing:** TAA is applied using the velocity, previous velocity, current jittered lighting, depth, and an accumulation buffer smooth aliasing artifacts. We use velocity disocclusion and color clamping to reduce ghosting and disocclusion artifacts.
+
+### Animation Skinning
+
+Animation is implemented using bone matrices with inverse bind pose being applied. The steps are:
+
+- **Load GLTF Model:** Models with their skinned vertices, bones, and animation clips are loaded by the load function into custom skinned model classes
+- **Calculate Inverse Bind Pose:** The inverse bind pose matrices are calculated using forward kinematics and applying the matrix inverse on the transform. These are stored permanently.
+- **Interpolate Bone Matrices:** Gameplay code can tell a skinned model which animation and time t (0-1 normalized) is used and the animation clip with position/rotation data is interpolated using lerp and slerp. These are formed into bone matrices using forward kinematics.
+- **Inverse Bind Pose:** The inverse bind pose is applied to all of the bone matrices before handing off to the shader. This makes sure vertices are not displaced "twice".
+- **Custom Skinning Vertex Shader:** VS_ModelSkinned uses the bone matrices to transform vertices of every model with up to 2 bones of influence. This then goes through the normal deferred rendering pipeline.
 
 ### Physics Engine
 
 The custom physics engine, implemented in `physics_engine.js`, features:
 
-- **Fixed Timestep Integration:** Uses a fixed update loop for consistent simulation.
+- **Fixed Timestep Integration:** Instead of using delta time, a fixed update loop runs based on how much time has passed in order to "catch" up to the frame that will land on glass.
 - **Collision Detection:** Oriented bounding boxes (OBBs) are computed and used to detect and resolve collisions between the lamp and falling letters.
 - **Spring-Based Responses:** Implements soft-body physics for realistic letter squashing and bounce responses when the lamp stomps on them.
 - **Gravity and Friction:** Gravity is applied to all actors, and friction is simulated when objects interact with the ground.
-
-### Asset Loading and Shaders
-
-- **Asset Loading:** Models are loaded using the Three.js `GLTFLoader` (and `OBJLoader` for some assets), allowing for complex animated models.
-- **Shaders:** A suite of custom GLSL shaders is provided in `shaders.js`:
-    - **Vertex Shaders:** Handle both standard and skinned models.
-    - **Fragment Shaders:** Include physically based rendering (PBR), tonemapping, and specialized shaders for debugging and smoke effects.
-    - **Temporal Anti-Aliasing (TAA):** A shader pass that uses motion vectors to reduce aliasing artifacts over successive frames.
 
 ### User Interface
 
@@ -109,26 +111,11 @@ The project is divided into several key files:
 - **`ui.js`:** Handles all user interface elements, including menus and HUD.
 - **`shaders.js`:** Defines the GLSL shader source code used in various render passes.
 
-### Rendering Pipeline
-
-The rendering pipeline follows these main steps:
-
-1. **G-Buffer Pass:** Render the scene into multiple textures to capture geometry, normals, and material properties.
-2. **Shadow Mapping:** Render the scene from the light’s point of view to create a depth map for shadows.
-3. **Lighting Pass:** Use the G-buffer and shadow map to compute physically based lighting using the Cook-Torrance BRDF model.
-4. **Post-Processing:** Apply tone mapping and TAA to enhance image quality and smooth temporal artifacts.
-5. **Blitting:** Copy the final processed image to the screen.
-
 ### Physics and Collision Handling
 
 - **Verlet Integration:** Actor positions are updated using a form of velocity verlet integration to simulate motion.
 - **OBB Collision Resolution:** The physics engine computes oriented bounding boxes for actors and resolves collisions based on minimum translation vectors (MTVs).
 - **Spring Forces:** Soft-body responses simulate letter deformation when the lamp lands on them, awarding points and adjusting health.
-
-### Special Effects
-
-- **Smoke Rendering:** A dedicated smoke shader simulates volumetric smoke using noise and fractal brownian motion (fbm). This effect is triggered upon events such as the lamp landing.
-- **Temporal Anti-Aliasing (TAA):** Motion vectors stored in the G-buffer are used to blend previous frames with the current frame, reducing aliasing.
 
 ---
 
