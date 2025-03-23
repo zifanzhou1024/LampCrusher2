@@ -144,8 +144,8 @@ const cube = new Actor(
 async function load_scene()
 {
   const letter_mat = new Material( kShaders.PS_PBRMaterial, { g_Diffuse: [ 0.0, 0.0, 0.0 ], g_Roughness: 0.1, g_Metallic: 0.5 } );
-  const lamp_model = await load_gltf_model( '/assets/lamp.glb' );
-  const letter_a_model = await load_gltf_model( '/assets/pixar_a.glb' );
+  const lamp_model = await load_gltf_model( 'assets/lamp.glb' );
+  const letter_a_model = await load_gltf_model( 'assets/pixar_a.glb' );
 
   const lamp      = new Actor(
     lamp_model,
