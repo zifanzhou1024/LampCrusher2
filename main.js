@@ -5,6 +5,9 @@ import { Actor, Scene, Camera, Material, Renderer, DirectionalLight, SpotLight, 
 import * as THREE from 'three';
 import { Vector2, Vector3, Vector4, Matrix4 } from 'three';
 
+import lampGLB from './assets/lamp.glb';
+import letterAGLB from './assets/pixar_a.glb';
+
 const renderer = new Renderer();
 
 const scene = new Scene();
@@ -144,8 +147,8 @@ const cube = new Actor(
 async function load_scene()
 {
   const letter_mat = new Material( kShaders.PS_PBRMaterial, { g_Diffuse: [ 0.0, 0.0, 0.0 ], g_Roughness: 0.1, g_Metallic: 0.5 } );
-  const lamp_model = await load_gltf_model( 'assets/lamp.glb' );
-  const letter_a_model = await load_gltf_model( 'assets/pixar_a.glb' );
+  const lamp_model = await load_gltf_model( lampGLB );
+  const letter_a_model = await load_gltf_model( letterAGLB );
 
   const lamp      = new Actor(
     lamp_model,
