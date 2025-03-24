@@ -146,9 +146,15 @@ const cube = new Actor(
 
 async function load_scene()
 {
+    //const baseUrl = import.meta.env.BASE_URL;
+    //console.log(baseUrl); // Output: /your-base-url/
   const letter_mat = new Material( kShaders.PS_PBRMaterial, { g_Diffuse: [ 0.0, 0.0, 0.0 ], g_Roughness: 0.1, g_Metallic: 0.5 } );
-  const lamp_model = await load_gltf_model( lampGLB );
-  const letter_a_model = await load_gltf_model( letterAGLB );
+  const lampUrl = import.meta.env.BASE_URL + 'assets/lamp.glb';
+  const letterAUrl = import.meta.env.BASE_URL + 'assets/pixar_a.glb';
+  // const lampUrl = new URL('/assets/lamp.glb', import.meta.url).href;
+  // const letterAUrl = new URL('/assets/pixar_a.glb', import.meta.url).href;
+  const lamp_model = await load_gltf_model( lampUrl );
+  const letter_a_model = await load_gltf_model( letterAUrl );
 
   const lamp      = new Actor(
     lamp_model,
