@@ -625,7 +625,7 @@ export const kCubeMesh = new GpuMesh(
 export function load_gltf_model( asset, transform = new Matrix4() )
 {
   const loader = new GLTFLoader();
-  loader.setPath( '/assets/' );
+  loader.setPath( '/LampCrusher2/assets/' );
   return new Promise( ( resolve, reject ) =>
   {
     loader.load( asset, ( gltf ) =>

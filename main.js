@@ -144,44 +144,93 @@ const cube = new Actor(
   )
 );
 
-async function load_scene()
-{
-    //const baseUrl = import.meta.env.BASE_URL;
-    //console.log(baseUrl); // Output: /your-base-url/
-  const letter_mat = new Material( kShaders.PS_PBRMaterial, { g_Diffuse: [ 0.0, 0.0, 0.0 ], g_Roughness: 0.1, g_Metallic: 0.5 } );
-  const lampUrl = import.meta.env.BASE_URL + 'assets/lamp.glb';
-  const letterAUrl = import.meta.env.BASE_URL + 'assets/pixar_a.glb';
-  // const lampUrl = new URL('/assets/lamp.glb', import.meta.url).href;
-  // const letterAUrl = new URL('/assets/pixar_a.glb', import.meta.url).href;
-  const lamp_model = await load_gltf_model( lampUrl );
-  const letter_a_model = await load_gltf_model( letterAUrl );
+async function load_scene() {
+    const letter_mat = new Material(kShaders.PS_PBRMaterial, { g_Diffuse: [0.0, 0.0, 0.0], g_Roughness: 0.1, g_Metallic: 0.5 });
 
-  const lamp      = new Actor(
-    lamp_model,
-    new Material(
-      kShaders.PS_PBRMaterial,
-      { 
-        g_Diffuse: [ 1.0, 1.0, 1.0 ],
-        g_Roughness: 0.1,
-        g_Metallic: 0.5  
-      } 
-    )
-  );
-  const letter_a = new Actor( letter_a_model, letter_mat );
-  lamp.transform.makeScale(3, 3, 3);
-  scene.actors.push(lamp);
-  scene.actors.push(letter_a);
+    // Debug: Log the base URL to see what it actually is
+    console.log("Base URL:", import.meta.env.BASE_URL);
 
-  const spot_light_pos = ( new Vector4(0.0,  1.0,  0.5, 1.0) ).applyMatrix4( lamp.transform );
-  const spot_light_dir = ( new Vector4(0.0, -0.5,  1.0, 0.0) ).applyMatrix4( lamp.transform );
-  scene.spot_light = new SpotLight(
-    new Vector3( spot_light_pos.x, spot_light_pos.y, spot_light_pos.z ),
-    new Vector3( spot_light_dir.x, spot_light_dir.y, spot_light_dir.z ),
-    new Vector3( 1, 1, 1 ),
-    10.0,
-    Math.PI / 9,
-    Math.PI / 6,
-  );
+    // Check if we're running locally or in production
+    const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
+
+    // Construct URLs with fallbacks
+    let lampUrl;
+    let letterAUrl;
+
+    if (isProduction) {
+        // For production build with base path
+        lampUrl = `${import.meta.env.BASE_URL}assets/lamp.glb`;
+        letterAUrl = `${import.meta.env.BASE_URL}assets/pixar_a.glb`;
+    } else {
+        // For local development where base path might not be correct
+        // Try a few different variations
+        const basePaths = [
+            import.meta.env.BASE_URL,
+            '/LampCrusher2/',
+            '/',
+            ''
+        ];
+
+        // Find a base path that works by checking if the file exists
+        for (const basePath of basePaths) {
+            const testUrl = `${basePath}assets/lamp.glb`;
+            try {
+                const response = await fetch(testUrl, { method: 'HEAD' });
+                if (response.ok) {
+                    lampUrl = testUrl;
+                    letterAUrl = `${basePath}assets/pixar_a.glb`;
+                    console.log("Found working base path:", basePath);
+                    break;
+                }
+            } catch (e) {
+                console.log(`Path ${testUrl} failed:`, e);
+            }
+        }
+
+        // If we couldn't find a working path, use a default
+        if (!lampUrl) {
+            console.warn("Couldn't find working asset path, using fallback");
+            lampUrl = '/LampCrusher2/assets/lamp.glb';
+            letterAUrl = '/LampCrusher2/assets/pixar_a.glb';
+        }
+    }
+
+    console.log("Loading lamp from:", lampUrl);
+    console.log("Loading letter A from:", letterAUrl);
+
+    try {
+        const lamp_model = await load_gltf_model(lampUrl);
+        const letter_a_model = await load_gltf_model(letterAUrl);
+
+        const lamp = new Actor(
+            lamp_model,
+            new Material(
+                kShaders.PS_PBRMaterial,
+                {
+                    g_Diffuse: [1.0, 1.0, 1.0],
+                    g_Roughness: 0.1,
+                    g_Metallic: 0.5
+                }
+            )
+        );
+        const letter_a = new Actor(letter_a_model, letter_mat);
+        lamp.transform.makeScale(3, 3, 3);
+        scene.actors.push(lamp);
+        scene.actors.push(letter_a);
+
+        const spot_light_pos = (new Vector4(0.0, 1.0, 0.5, 1.0)).applyMatrix4(lamp.transform);
+        const spot_light_dir = (new Vector4(0.0, -0.5, 1.0, 0.0)).applyMatrix4(lamp.transform);
+        scene.spot_light = new SpotLight(
+            new Vector3(spot_light_pos.x, spot_light_pos.y, spot_light_pos.z),
+            new Vector3(spot_light_dir.x, spot_light_dir.y, spot_light_dir.z),
+            new Vector3(1, 1, 1),
+            10.0,
+            Math.PI / 9,
+            Math.PI / 6,
+        );
+    } catch (error) {
+        console.error("Error loading models:", error);
+    }
 }
 
 load_scene();
