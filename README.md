@@ -41,21 +41,27 @@ The project is organized as follows:
 
 ```
 LampCrusher2/
-├── LICENSE
-├── README.md
-├── dist/                   # Production build output folder
-├── public/                 # Static assets (e.g., glTF models, textures)
-├── node_modules/           # Installed npm packages
-├── assets/                 # (Legacy) assets for OBJ/MTL models
-├── gpu.js                  # GPU modules for mesh and shader management
-├── renderer.js             # Main rendering pipeline and scene management
-├── physics_engine.js       # Custom physics engine implementation
-├── shaders.js              # GLSL shader source definitions
-├── ui.js                   # User interface code (menus, HUD, popups)
-├── lamp_crusher_two.js     # Main game logic and scene setup
-├── package.json            # Project dependencies and scripts
-├── vite.config.js          # Vite configuration for development/build
-└── (other files such as main.js, ui.css, etc.)
+├── LICENSE                      # License file for the project
+├── LampCrusher2.10x             # Additional build or version file
+├── README.md                    # This documentation file
+├── REPORT.md                    # Project report and analysis
+├── dist/                       # Production build output folder
+├── gpu.js                     # GPU modules for mesh and shader management
+├── index.html                   # Main HTML file
+├── lamp_crusher_two.js          # Main game logic and scene setup
+├── main.js                      # Additional game setup and initialization code
+├── node_modules/               # Installed npm packages
+├── package-lock.json            # npm lock file for dependency versions
+├── package.json                 # Project dependencies and scripts
+├── physics_engine.js            # Custom physics engine implementation
+├── public/                     # Static assets folder
+│   └── assets/                 # Contains models (glTF, FBX, Blend files), textures, icons, etc.
+├── renderer.js                 # Main rendering pipeline and scene management
+├── shaders.js                  # GLSL shader source definitions
+├── ui.css                     # Styles for the user interface
+├── ui.js                      # User interface code (menus, HUD, popups)
+└── vite.config.js              # Vite configuration for development/build
+
 ```
 
 *Note:* The project has undergone significant changes—from a simple Three.js demo to an advanced WebGL game with custom physics, rendering, and UI modules.
